@@ -204,7 +204,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     android.hardware.graphics.allocator@2.0-impl \
     android.hardware.graphics.allocator@2.0-service  \
-    android.hardware.graphics.composer@2.2-service  \
     android.hardware.graphics.mapper@2.0-impl \
     android.hardware.renderscript@1.0-impl \
     libExynosHWCService \
@@ -215,6 +214,15 @@ PRODUCT_PACKAGES += \
     libtinyxml \
     libion \
     libtinyxml
+
+ifeq ($(TARGET_DEVICE_HAS_SAMSUNG_SLSI_EXYNOS7870),true)
+# only for prebuilt bsp running on arm hwcomposer
+PRODUCT_PACKAGES += \
+    android.hardware.graphics.composer@2.1-service.universal7870
+else
+PRODUCT_PACKAGES += \
+    android.hardware.graphics.composer@2.1-service
+endif
     
 # Memtrack
 PRODUCT_PACKAGES += \
@@ -224,7 +232,7 @@ PRODUCT_PACKAGES += \
 
 # Configstore
 PRODUCT_PACKAGES += \
-    android.hardware.configstore@1.0-service \
+    android.hardware.configstore@1.1-service \
     vndservicemanager
 
 # DRM

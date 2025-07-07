@@ -2,22 +2,11 @@
 # Graphics
 system/lib64/hw/gralloc.exynos5.so:vendor/lib64/hw/gralloc.exynos7870.so
 system/lib/hw/gralloc.exynos5.so:vendor/lib/hw/gralloc.exynos7870.so
-system/lib64/hw/hwcomposer.exynos5.so:vendor/lib64/hw/hwcomposer.exynos7870.so
 system/lib/hw/hwcomposer.exynos5.so:vendor/lib/hw/hwcomposer.exynos7870.so
-system/lib64/libexynosdisplay.so:vendor/lib64/libexynosdisplay.so
-system/lib/libexynosdisplay.so:vendor/lib/libexynosdisplay.so
-system/lib64/libExynosHWCService.so:vendor/lib64/libExynosHWCService.so
-system/lib/libExynosHWCService.so:vendor/lib/libExynosHWCService.so
 system/lib64/libexynosscaler.so:vendor/lib64/libexynosscaler.so
 system/lib/libexynosscaler.so:vendor/lib/libexynosscaler.so
 system/lib64/libexynosgscaler.so:vendor/lib64/libexynosgscaler.so
 system/lib/libexynosgscaler.so:vendor/lib/libexynosgscaler.so
-system/lib64/libhdmi.so:vendor/lib64/libhdmi.so
-system/lib/libhdmi.so:vendor/lib/libhdmi.so
-system/lib64/libhwcutils.so:vendor/lib64/libhwcutils.so
-system/lib/libhwcutils.so:vendor/lib/libhwcutils.so
-system/lib64/libvirtualdisplay.so:vendor/lib64/libvirtualdisplay.so
-system/lib/libvirtualdisplay.so:vendor/lib/libvirtualdisplay.so
 system/vendor/lib64/libcsc.so:vendor/lib64/libcsc.so
 system/vendor/lib/libcsc.so:vendor/lib/libcsc.so
 system/vendor/lib64/libexynosutils.so:vendor/lib64/libexynosutils.so

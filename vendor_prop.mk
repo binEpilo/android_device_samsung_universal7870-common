@@ -35,6 +35,14 @@ PRODUCT_PROPERTY_OVERRIDES += \
     debug.hwc.skip_dma_types=0,2 \
     debug.sf.latch_unsignaled=1
 
+ifeq ($(TARGET_DEVICE_HAS_SAMSUNG_SLSI_EXYNOS7870),true)
+# only for prebuilt bsp
+PRODUCT_PROPERTY_OVERRIDES += \
+    debug.hwc.otf=1 \
+    debug.hwc.winupdate=1 \
+    debug.hwc.nodirtyregion=1
+endif
+
 # Location 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.location.osnlp.package=com.google.android.gms \

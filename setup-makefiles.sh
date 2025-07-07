@@ -176,10 +176,22 @@ for PROP_FILE in "${!PROP_FILES[@]}"; do
     write_makefiles "${MY_DIR}/${TOOLS_DIR}/starlte/${PROP_FILE}"
     write_footers
     fi
+    if [[ "$PROP_FILE" == proprietary-files_a6ltep*.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/a6ltep/${PROP_FILE}"
+    write_footers
+    fi
+    fi
     if [[ "$PROP_FILE" == proprietary-files_a6lte*.txt ]]; then
     if [[ "$PROP_FILE" != proprietary-files_a6lte.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep_bsp_p.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6lte_p.txt ]]; then
     write_makefiles "${MY_DIR}/${TOOLS_DIR}/a6lte/${PROP_FILE}"
     write_footers
+    fi
+    fi
+    fi
     fi
     fi
     if [[ "$PROP_FILE" == proprietary-files_a7y17lte*.txt ]]; then
@@ -202,6 +214,8 @@ DEVICE_COMMON_GNSS="sec_gnss" #a6lte_gnss
 DEVICE_COMMON_TEE="tee" #a6lte_tee
 DEVICE_COMMON_SECAPP="secapp" #a6lte_secapp
 DEVICE_COMMON_SAMSUNG_SLSI="samsung_slsi" #a7y17lte_bsp
+DEVICE_COMMON_SAMSUNG_SLSI_Q="samsung_slsi_q" #a6lte_q_bsp
+DEVICE_COMMON_SAMSUNG_SLSI_P="samsung_slsi_p" #a6lte_p_bsp
 DEVICE_COMMON_KEYMASTER="sec_keymaster" #a6lte_keymaster
 DEVICE_COMMON_TFA_SEC_AUDIO="tfa_sec_audio" #m10lte_audio
 DEVICE_COMMON_SEC_AUDIO="sec_audio" #a6lte_audio
@@ -371,6 +385,26 @@ sed -i "/\b\(libLifevibes_lvverx\|libLifevibes_lvvetx\|libpreprocessing_nxp\|lib
         cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk"
     fi
 
+    if [[ "$COMMON_NAME" == a6ltep_bsp_p ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_P}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_bsp ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_Q}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk"
+    fi
+
     if [[ "$COMMON_NAME" == m10lte || "$COMMON_NAME" == starlte || "$COMMON_NAME" == a7y17lte ]]; then
         mkdir -p "${VENDOR_MK_ROOT}"/proprietary
         cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}"
@@ -468,6 +502,8 @@ endif
 # misc
 ifeq (\$(TARGET_DEVICE_HAS_SAMSUNG_SLSI_EXYNOS7870),true)
 -include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk
 endif
 
 # keymaster & keystore
@@ -828,7 +864,7 @@ PRODUCT_PACKAGES += \\
     libtfa98xx
     
 PRODUCT_COPY_FILES += \\
-    vendor/samsung/universal7870-common/tfa_sec_audio/proprietary/vendor/etc/Tfa9896.cnt:$(TARGET_COPY_OUT_VENDOR)/etc/Tfa9896.cnt
+    vendor/samsung/universal7870-common/tfa_sec_audio/proprietary/vendor/etc/Tfa9896.cnt:\$(TARGET_COPY_OUT_VENDOR)/etc/Tfa9896.cnt
 endif
 
 EOF
@@ -847,6 +883,7 @@ rm -rf "${VENDOR_MK_ROOT_INTERNAL_COMMON}"
 done
 
 rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a6lte
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a6ltep
 rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/m10lte
 rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/starlte
 rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a7y17lte
