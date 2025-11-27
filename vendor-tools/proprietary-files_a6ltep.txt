@@ -7,6 +7,3 @@ vendor/lib/libhwcutils.so
 vendor/lib/libmpp.so
 vendor/lib/libvirtualdisplay.so
 
-
-
-

@@ -249,6 +249,12 @@ for PROP_FILE in "${!PROP_FILES[@]}"; do
     if [[ "$PROP_FILE" == "proprietary-files_a7y17lte.txt" ]]; then
     SOURCE_DIR_A7Y17LTE=${PROP_FILES[$PROP_FILE]}
     fi
+    if [[ "$PROP_FILE" == "proprietary-files_gracerlte.txt" ]]; then
+    SOURCE_DIR_GRACERLTE=${PROP_FILES[$PROP_FILE]}
+    fi
+    if [[ "$PROP_FILE" == "proprietary-files_oss.txt" ]]; then
+    SOURCE_DIR_OSS_PREBUILT=${PROP_FILES[$PROP_FILE]}
+    fi
 done
 
 for PROP_FILE in "${!PROP_FILES[@]}"; do
@@ -284,6 +290,12 @@ for PROP_FILE in "${!PROP_FILES[@]}"; do
     fi
     if [[ "$PROP_FILE" == proprietary-files_a7y17lte*.txt ]]; then
     extract "${MY_DIR}/${TOOLS_DIR}/a7y17lte/${PROP_FILE}" "${SOURCE_DIR_A7Y17LTE}" "${KANG}" --section "${SECTION}"
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_gracerlte_bsp_p.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/gracerlte/${PROP_FILE}" "${SOURCE_DIR_GRACERLTE}" "${KANG}" --section "${SECTION}"
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_oss_hwc.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/oss/${PROP_FILE}" "${SOURCE_DIR_OSS_PREBUILT}" "${KANG}" --section "${SECTION}"
     fi
     
 done
@@ -529,23 +541,23 @@ for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
     # prebuilt bsp
 
     # (lib64/omx/)
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/libExynosOMX_Core.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
-    sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/libExynosOMX_Core.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
 
     # (lib/omx/)
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/libExynosOMX_Core.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
-    sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
-
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/libExynosOMX_Core.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
+#
 
     #Original
     #0000:60A0 |                 73 79 73  2F 64 65 76  69 63 65 73 |      sys/devices
@@ -574,6 +586,31 @@ for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
 
     # sed -i 's|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x65\x64\x20|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x62\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x64\x20|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/hw/hwcomposer.exynos7870.so"
 
+    fi
+
+    if [[ "$COMMON_NAME" == gracerlte ]]; then
+    BLOB_ROOT_GRACERLTE_BSP="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_GRACERLTE_BSP}"
+    
+    # (lib64/omx/) no patches needed here
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/libExynosOMX_Core.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
+
+    # (lib/omx/)
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/libExynosOMX_Core.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
+
+    # Add other gracerlte specific patches as needed
     fi
 
     if [[ "$COMMON_NAME" == starlte_radio ]]; then

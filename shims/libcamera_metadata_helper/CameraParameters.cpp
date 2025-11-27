@@ -349,7 +349,7 @@ static void parseSizesList(const char *sizesStr, Vector<Size> &sizes)
 void CameraParameters::setPreviewSize(int width, int height)
 {
     char str[32];
-    sprintf(str, "%dx%d", width, height);
+        sprintf(str, "%dx%d", width, height);
     set(KEY_PREVIEW_SIZE, str);
 }
 

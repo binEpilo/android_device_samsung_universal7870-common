@@ -159,6 +159,10 @@ for PROP_FILE in "${!PROP_FILES[@]}"; do
     if [[ "$PROP_FILE" == "proprietary-files_m10lte_radio.txt" || "$PROP_FILE" == "proprietary-files_a6lte_audio.txt" ]]; then
     write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m10lte j7popelteskt"
     fi
+
+    if [[ "$PROP_FILE" == "proprietary-files_oss-prebuilt.txt" ]]; then
+    write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m10lte j7popelteskt"
+    fi
     
     if [[ "$PROP_FILE" == "proprietary-files_m10lte_audio.txt" ]]; then
     write_headers "a3y17lte j5y17lte j6lte j7y17lte m10lte gtaxlwifi gtaxllte"
@@ -166,6 +170,16 @@ for PROP_FILE in "${!PROP_FILES[@]}"; do
     
     if [[ "$PROP_FILE" == "proprietary-files_a6lte_audio.txt" ]]; then
     write_headers "a6lte j7velte j7xelte on7xelte j7popelteskt"
+    fi
+
+    if [[ "$PROP_FILE" == proprietary-files_gracerlte_bsp_p.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/gracerlte/${PROP_FILE}"
+    write_footers
+    fi
+
+    if [[ "$PROP_FILE" == proprietary-files_oss_hwc.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/oss/${PROP_FILE}"
+    write_footers
     fi
 
     if [[ "$PROP_FILE" == proprietary-files_m10lte*.txt ]]; then
@@ -214,6 +228,8 @@ DEVICE_COMMON_GNSS="sec_gnss" #a6lte_gnss
 DEVICE_COMMON_TEE="tee" #a6lte_tee
 DEVICE_COMMON_SECAPP="secapp" #a6lte_secapp
 DEVICE_COMMON_SAMSUNG_SLSI="samsung_slsi" #a7y17lte_bsp
+DEVICE_COMMON_SAMSUNG_SLSI_OMX="samsung_slsi_omx" #gracerlte_slsi_p
+DEVICE_COMMON_SAMSUNG_SLSI_OSS="samsung_slsi_oss" #samsung_slsi_oss
 DEVICE_COMMON_SAMSUNG_SLSI_Q="samsung_slsi_q" #a6lte_q_bsp
 DEVICE_COMMON_SAMSUNG_SLSI_P="samsung_slsi_p" #a6lte_p_bsp
 DEVICE_COMMON_KEYMASTER="sec_keymaster" #a6lte_keymaster
@@ -385,6 +401,26 @@ sed -i "/\b\(libLifevibes_lvverx\|libLifevibes_lvvetx\|libpreprocessing_nxp\|lib
         cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk"
     fi
 
+    if [[ "$COMMON_NAME" == oss_hwc ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_OSS}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == gracerlte_bsp_p ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_OMX}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}-vendor.mk"
+    fi
+
     if [[ "$COMMON_NAME" == a6ltep_bsp_p ]]; then
         sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_P}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
         mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}"/proprietary
@@ -395,15 +431,15 @@ sed -i "/\b\(libLifevibes_lvverx\|libLifevibes_lvvetx\|libpreprocessing_nxp\|lib
         cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk"
     fi
 
-    if [[ "$COMMON_NAME" == a6lte_bsp ]]; then
-        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_Q}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
-        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"/proprietary
-        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"
-        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.mk"
-        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/BoardConfigVendor.mk"
-        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.bp"
-        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk"
-    fi
+    #if [[ "$COMMON_NAME" == a6lte_bsp ]]; then
+    #    sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_Q}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+    #    mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"/proprietary
+    #    cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.mk"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/BoardConfigVendor.mk"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.bp"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk"
+    #fi
 
     if [[ "$COMMON_NAME" == m10lte || "$COMMON_NAME" == starlte || "$COMMON_NAME" == a7y17lte ]]; then
         mkdir -p "${VENDOR_MK_ROOT}"/proprietary
@@ -502,8 +538,10 @@ endif
 # misc
 ifeq (\$(TARGET_DEVICE_HAS_SAMSUNG_SLSI_EXYNOS7870),true)
 -include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}-vendor.mk
 -include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk
 -include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}-vendor.mk
 endif
 
 # keymaster & keystore
