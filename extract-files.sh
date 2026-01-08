@@ -1,12 +1,14 @@
 #!/bin/bash
-# # Copyright (C) 2017-2021 The LineageOS Project
+# # Copyright (C) 2017-2024 The LineageOS Project
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 set -e
 
+
 DEVICE_COMMON=universal7870-common
+
 VENDOR=samsung
 TOOLS_DIR=vendor-tools
 
@@ -17,8 +19,19 @@ if [[ ! -d "${MY_DIR}" ]]; then MY_DIR="${PWD}"; fi
 ANDROID_ROOT="${MY_DIR}/../../.."
 HELPER="${ANDROID_ROOT}/tools/extract-utils/extract_utils.sh"
 
+# VENDOR_MK_ROOT
+VENDOR_MK_ROOT_INTERNAL="${ANDROID_ROOT}"/vendor/"${VENDOR}"
+VENDOR_MK_ROOT="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${DEVICE_COMMON}"
+#INTERNAL_VENDOR_MK_ROOT_AUDIO_M10LTE="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${INTERNAL_DEVICE_COMMON_AUDIO_M10LTE}"
+#INTERNAL_VENDOR_MK_ROOT_AUDIO_A6LTE="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${INTERNAL_DEVICE_COMMON_AUDIO_A6LTE}"
+#...
+
 # BLOB_ROOT
-BLOB_ROOT="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${DEVICE_COMMON}"/proprietary
+BLOB_ROOT="${VENDOR_MK_ROOT}"/proprietary
+#BLOB_ROOT_AUDIO_M10LTE="${INTERNAL_VENDOR_MK_ROOT_AUDIO_M10LTE}"/proprietary
+#BLOB_ROOT_AUDIO_A6LTE="${INTERNAL_VENDOR_MK_ROOT_AUDIO_A6LTE}"/proprietary
+#BLOB_ROOT_M10LTE="${INTERNAL_VENDOR_MK_ROOT_M10LTE}"/proprietary
+#...
 
 if [ ! -f "${HELPER}" ]; then
     echo "Unable to find helper script at ${HELPER}"
@@ -32,26 +45,147 @@ CLEAN_VENDOR=true
 KANG=
 SECTION=
 
-# TODO: NOTHING
+###################################################################################
+# The function 'generate_prop_files_array' takes a path directory as an argument.
+# It locates all files within directory that match 'proprietary-files_*.txt'.
+# Each of these files is added to a global associative array named 'PROP_FILES'.
+# The filename is set as the key and the value is set as an empty string.
+#
+# PROP_FILES["proprietary-files_a6lte.txt"]=""                                                             
+# PROP_FILES["proprietary-files_m10lte.txt"]=""
+###################################################################################
+
 
 generate_prop_files_array() {
-# The path to vendor-tools directory
+    # The path to vendor-tools directory
     local vendor_tools_dir="$1"
-# Declare PROP_FILES as a global associative array    
+    # Declare PROP_FILES as a global associative array    
     declare -gA PROP_FILES
+    # Declare INTERNAL_DEVICE_COMMON as a global associative array
+    declare -gA INTERNAL_DEVICE_COMMON
 
-# List all 'proprietary-files_*.txt' files in the vendor-tools directory
+    # Declare PROP_CODENAMES as a global associative array
+    declare -gA PROP_CODENAMES
+
+    # List all 'proprietary-files_*.txt' files in the vendor-tools directory
     local files=(${vendor_tools_dir}/proprietary-files_*.txt)
     for file_path in "${files[@]}"; do
         if [[ -f "$file_path" ]]; then
             local filename=$(basename "$file_path")
-# Add to associative array with empty value            
+            # Add to PROP_FILES associative array with empty value            
             PROP_FILES["$filename"]=""
+
+            # Extract the part after 'proprietary-files_' and before '.txt'
+            local name_part=${filename#proprietary-files_}
+            name_part=${name_part%.txt}
+            # Add to INTERNAL_DEVICE_COMMON associative array with filename as key
+            INTERNAL_DEVICE_COMMON["$filename"]="$name_part"
+
+            # Extract and process codename
+            local codename=$(echo "$name_part" | cut -d'_' -f1)
+            if [[ "$codename" != "common" ]]; then
+                PROP_CODENAMES["$codename"]=""
+            fi
         fi
     done
+
+    # Generate INTERNAL_VENDOR_MK_ROOT
+    for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+        name="${INTERNAL_DEVICE_COMMON[$key]}"
+        root_name="INTERNAL_VENDOR_MK_ROOT_${name}"
+
+        declare -g "${root_name}=${ANDROID_ROOT}/vendor/${VENDOR}/${name}"
+    done
+    
 }
 
+split_files() {
+    local codename="$1"
+    local base_dir="${MY_DIR}/${TOOLS_DIR}"
+    local codename_dir="${base_dir}/${codename}"
+    mkdir -p "$codename_dir"  # Ensure the codename directory exists
+
+    # Variable to hold the current file name, empty initially
+    current_file=""
+
+    # Read proprietary-files.txt line by line
+    while IFS= read -r line; do
+        # Check if the line is a file marker
+        if [[ "$line" =~ ^###FILE###:(.*) ]]; then
+            # Extract the file name from the marker
+            current_file="${BASH_REMATCH[1]}"
+            # Skip file creation if the file name is empty (should not happen)
+            if [ -z "$current_file" ]; then
+                continue
+            fi
+            # Start writing to the new file, creating it or overwriting if it already exists
+            # Ensure files are created in the codename directory
+            echo -n "" > "${codename_dir}/${current_file}"
+        else
+            # Append the line to the current file, if there is one
+            if [ -n "$current_file" ]; then
+                echo "$line" >> "${codename_dir}/${current_file}"
+            fi
+        fi
+    done < "${base_dir}/proprietary-files_${codename}.txt"
+}
+
+
 generate_prop_files_array "${MY_DIR}/${TOOLS_DIR}"
+
+echo "Printing PROP_FILES array:"
+for filename in "${!PROP_FILES[@]}"; do
+    echo "Filename: $filename"
+done
+
+echo "Printing INTERNAL_DEVICE_COMMON array:"
+for filename in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    echo "Filename: $filename, Extracted Name: ${INTERNAL_DEVICE_COMMON[$filename]}"
+done
+
+echo "Printing PROP_CODENAMES array:"
+
+for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    common_name="${INTERNAL_DEVICE_COMMON[$key]}"
+    
+    mk_root_varname="INTERNAL_VENDOR_MK_ROOT_${common_name}"
+    blob_root_varname="BLOB_ROOT_${common_name}"
+    
+    # Using indirect variable reference to get the values
+    echo "$mk_root_varname:"
+    echo "${!mk_root_varname}"
+    echo "$blob_root_varname:"
+    echo "${!mk_root_varname}/proprietary"
+done
+
+for codename in "${!PROP_CODENAMES[@]}"; do
+    echo "Codename: $codename"
+done
+
+echo ""
+
+for codename in "${!PROP_CODENAMES[@]}"; do
+    base_dir="${MY_DIR}/${TOOLS_DIR}/"
+    codename_dir="${base_dir}/${codename}"
+    mkdir -p "$codename_dir"
+        echo "Processing codename: $codename"
+    split_files "$codename"
+    generate_prop_files_array "$codename_dir"
+done
+
+
+for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    common_name="${INTERNAL_DEVICE_COMMON[$key]}"
+    
+    mk_root_varname="INTERNAL_VENDOR_MK_ROOT_${common_name}"
+    blob_root_varname="BLOB_ROOT_${common_name}"
+    
+    # Using indirect variable reference to get the values
+    echo "$mk_root_varname:"
+    echo "${!mk_root_varname}"
+    echo "$blob_root_varname:"
+    echo "${!mk_root_varname}/proprietary"
+done
 
 function usage() {
     echo "Usage: $0 [options]"
@@ -99,282 +233,428 @@ while [ "${#}" -gt 0 ]; do
     shift
 done
 
-# Initialize the helper
-setup_vendor "${DEVICE_COMMON}" "${VENDOR}" "${ANDROID_ROOT}" true "${CLEAN_VENDOR}"
-
-move_file() {
-    local source_file="$1"
-    local destination_file="$2"
-
-    if [[ -f "$source_file" ]]; then
-        mkdir -p "$(dirname "$destination_file")" || return 1
-        if ! mv -vn "$source_file" "$destination_file"; then
-            return 1
-        else
-            echo "Moved $source_file to $destination_file"
-        fi
-    else
-        echo "Warning: '$source_file' does not exist. Skipping..." >&2
+for PROP_FILE in "${!PROP_FILES[@]}"; do
+    if [[ "$PROP_FILE" == "proprietary-files_m10lte.txt" ]]; then
+    SOURCE_DIR_M10LTE=${PROP_FILES[$PROP_FILE]}
     fi
-}
-
-extra_folder_section() {
-    local input_file="$1"        # The original file to read from
-    local output_file="$2"       # The file to write the section to
-    local write_flag=false      
-    extra_folder_name=""
-
-    # Check if the input file exists
-    if [ ! -f "$input_file" ]; then
-        echo "The input file does not exist."
-        return 1
+    if [[ "$PROP_FILE" == "proprietary-files_a6lte.txt" ]]; then
+    SOURCE_DIR_A6LTE=${PROP_FILES[$PROP_FILE]}
     fi
-
-    echo "Processing $input_file and extracting sections to $output_file"
-
-    # Process the input file line by line
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        echo "Reading line: $line"
-
-        # Check for the start of an EXTRA_FOLDER section
-        if [[ "$line" =~ ^#[[:space:]]*START_EXTRA_FOLDER:(.+)$ ]]; then
-            extra_folder_name="${BASH_REMATCH[1]}"
-            echo "Starting to extract section: $extra_folder_name"
-            write_flag=true
-            > "$output_file" # Empty the output file first
-            continue
-        # Check for the end of the current EXTRA_FOLDER section
-        elif [[ "$line" =~ ^#[[:space:]]*END_EXTRA_FOLDER ]]; then
-            if $write_flag; then
-                echo "Finished extracting section: $extra_folder_name"
-                write_flag=false
-                GLOABL_EXTRA_FOLDER_NAME=$extra_folder_name
-                extra_folder_name="" # Reset the name for the next section
-            fi
-        # If we are within the EXTRA_FOLDER section, write the line to the output file
-        elif $write_flag; then
-            echo "Writing line to $output_file"
-            echo "$line" >> "$output_file"
-        fi
-    done < "$input_file"
-
-    echo "Finished processing $input_file"
-}
-
-process_extra_folder_section_lines_fixup() {
-    local input_file="$1"
-    local temp_file="${input_file}.tmp"  # Temporary file to store changes
-
-    # Clear the temporary file if it already exists
-    : > "$temp_file"
-
-    while IFS= read -r line; do
-        # Skip empty lines and comments
-        [[ -z "$line" || "$line" =~ ^# ]] && continue
-        
-        # Edit lines to keep only the part after the colon
-        # The `sed` pattern here looks for 'something:something_else' and keeps 'something_else'
-        # since we already work with vendor and not source vendor/lib64/libril.so:vendor/lib64/libril-samsung.so
-        # only keep vendor/lib64/libril-samsung.so for example
-        processed_line=$(echo "$line" | sed -E 's/[^ :]+:([^ ]+)/\1/g')
-
-        # Write the processed line to the temporary file
-        echo "$processed_line" >> "$temp_file"
-    done < "$input_file"
-
-    # Move the temporary file to replace the original input file
-    mv "$temp_file" "$input_file"
-}
-
-process_extra_folder_section_lines() {
-    local input_file="$1"
-    local extra_folder="$2"
-    local blob_root="$3"
-
-    local line src dst source_path destination_path
-    
-    process_extra_folder_section_lines_fixup "$input_file"
-
-    while IFS= read -r line; do
-        # Skip empty lines and comments
-        [[ -z "$line" || "$line" =~ ^# ]] && continue
-
-        # Assign processed or unprocessed line to src and dst
-        src="$line"
-        dst="$line"
-
-        source_path="${blob_root}/${src}"
-        destination_path="${blob_root}/${extra_folder}/${dst}"
-
-        # Call your existing move_file function with the paths
-        move_file "$source_path" "$destination_path"
-    done < "$input_file"
-}
-
-
-process_extra_folders() {
-    # prop_file equal to proprietary-files_device.txt
-    local prop_file="$1"
-    # proprietary-files_device.txt is input_file
-    local input_file="${MY_DIR}/${TOOLS_DIR}/${prop_file}"
-
-    # output folder for extra_folder_proprietary-files_device.txt
-    local extra_folder_section_out="${MY_DIR}/${TOOLS_DIR}/extra_folder_section_out"
-    # actual output for extra_folder_proprietary-files_device.txt
-    local output_file="${extra_folder_section_out}/${prop_file}"
-    
-    mkdir -p "${extra_folder_section_out}"
-  
-    # emty stuff
-    : > "$output_file"
-
-    # Call extra_folder_section function to extract the section extraction
-    extra_folder_section "$input_file" "$output_file"
-    
-    local extra_folder="$GLOABL_EXTRA_FOLDER_NAME"
-
-    # Call process_extra_folder_section_lines function to process the section lines
-    process_extra_folder_section_lines "$output_file" "$extra_folder" "$BLOB_ROOT"
-
-    # Clean up out
-    rm -rf "$extra_folder_section_out"
-}
-
+    if [[ "$PROP_FILE" == "proprietary-files_a6ltep.txt" ]]; then
+    SOURCE_DIR_A6LTE_P=${PROP_FILES[$PROP_FILE]}
+    fi
+    if [[ "$PROP_FILE" == "proprietary-files_starlte.txt" ]]; then
+    SOURCE_DIR_STARLTE=${PROP_FILES[$PROP_FILE]}
+    fi
+    if [[ "$PROP_FILE" == "proprietary-files_a7y17lte.txt" ]]; then
+    SOURCE_DIR_A7Y17LTE=${PROP_FILES[$PROP_FILE]}
+    fi
+    if [[ "$PROP_FILE" == "proprietary-files_gracerlte.txt" ]]; then
+    SOURCE_DIR_GRACERLTE=${PROP_FILES[$PROP_FILE]}
+    fi
+    if [[ "$PROP_FILE" == "proprietary-files_oss.txt" ]]; then
+    SOURCE_DIR_OSS_PREBUILT=${PROP_FILES[$PROP_FILE]}
+    fi
+done
 
 for PROP_FILE in "${!PROP_FILES[@]}"; do
-    SOURCE_DIR=${PROP_FILES[$PROP_FILE]}
-    # Check if any source directory with proprietary-files is empty.
-    if [ -z "${SOURCE_DIR}" ]; then
-        echo "Error: Source directory not specified for ${PROP_FILE}. Provide it with --file ${PROP_FILE} <source_dir>"
-        usage
-    fi
-    
-    # Check if provided source directory exists
-    if [ ! -d "${SOURCE_DIR}" ]; then
-        echo "Error: Source directory ${SOURCE_DIR} does not exist."
-        exit 1
-    fi
-    
-    # helper needs to be in loop too to always get relauched with correct options
-    source "${HELPER}"
 
-    extract "${MY_DIR}/${TOOLS_DIR}/${PROP_FILE}" "${SOURCE_DIR}" "${KANG}" --section "${SECTION}"
-
-    # Handle the extra folder case
-    if [[ "$PROP_FILE" == "proprietary-files_m10lte.txt" ]]; then
-        process_extra_folders "$PROP_FILE"
+    COMMON_NAME="${INTERNAL_DEVICE_COMMON[$PROP_FILE]}"
+    if [ -z "$COMMON_NAME" ]; then
+    COMMON_NAME="dummy"
     fi
-    
-    if [[ "$PROP_FILE" == "proprietary-files_a6lte.txt" ]]; then
-        process_extra_folders "$PROP_FILE"
+    echo "Internal Codename: $COMMON_NAME"
+    setup_vendor "${COMMON_NAME}" "${VENDOR}" "${ANDROID_ROOT}" true "${CLEAN_VENDOR}"
+     
+    if [[ "$PROP_FILE" == proprietary-files_m10lte*.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/m10lte/${PROP_FILE}" "${SOURCE_DIR_M10LTE}" "${KANG}" --section "${SECTION}"
     fi
-
-    if [[ "$PROP_FILE" == "proprietary-files_a7y17lte.txt" ]]; then
-        process_extra_folders "$PROP_FILE"
+    if [[ "$PROP_FILE" == proprietary-files_starlte*.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/starlte/${PROP_FILE}" "${SOURCE_DIR_STARLTE}" "${KANG}" --section "${SECTION}"
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a6ltep*.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/a6ltep/${PROP_FILE}" "${SOURCE_DIR_A6LTE}" "${KANG}" --section "${SECTION}"
+    fi
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a6lte*.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6lte.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep_bsp_p.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6lte_p.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/a6lte/${PROP_FILE}" "${SOURCE_DIR_A6LTE}" "${KANG}" --section "${SECTION}"
+    fi
+    fi
+    fi
+    fi
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a7y17lte*.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/a7y17lte/${PROP_FILE}" "${SOURCE_DIR_A7Y17LTE}" "${KANG}" --section "${SECTION}"
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_gracerlte_bsp_p.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/gracerlte/${PROP_FILE}" "${SOURCE_DIR_GRACERLTE}" "${KANG}" --section "${SECTION}"
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_oss_hwc.txt ]]; then
+    extract "${MY_DIR}/${TOOLS_DIR}/oss/${PROP_FILE}" "${SOURCE_DIR_OSS_PREBUILT}" "${KANG}" --section "${SECTION}"
     fi
     
 done
 
-# audio.primary.exynos7870.so
-# replace libtinyalsa with renamed one
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
 
-# replace libaudioroute with renamed one
-sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
-sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
+for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    COMMON_NAME="${INTERNAL_DEVICE_COMMON[$key]}"
+    
+    mk_root_varname="INTERNAL_VENDOR_MK_ROOT_${COMMON_NAME}"
+    blob_root_varname="BLOB_ROOT_${COMMON_NAME}"
+    
+    # Using indirect variable reference to get the values
+    #echo "$mk_root_varname:"
+    #echo "${!mk_root_varname}"
+    #echo "$blob_root_varname:"
+    #echo "${!mk_root_varname}/proprietary"
+    
+    if [[ "$COMMON_NAME" == m10lte_audio ]]; then
+    BLOB_ROOT_AUDIO_M10LTE="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_AUDIO_M10LTE}"
+    
+    # replace libtinyalsa with renamed one
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
 
-# libpreprocessing_nxp.so
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libpreprocessing_nxp.so"
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libpreprocessing_nxp.so"
+    # replace libaudioroute with renamed one
+    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
 
-# libaudior7870.so
-# replace libtinyalsa with renamed one
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+    # libpreprocessing_nxp.so
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libpreprocessing_nxp.so"
 
-# replace so name
-sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
-sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+    # libaudior7870.so
+    # replace libtinyalsa with renamed one
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
 
-# libalsa7870.so
-# replace so name
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libalsa7870.so"
-sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libalsa7870.so"
+    # replace so name
+    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
 
-# libril-samsung.so | setting so name with patchelf breaks the lib
-#"${PATCHELF}" --set-soname "libril-samsung.so" "${BLOB_ROOT}/vendor/lib/libril-samsung.so"
-#"${PATCHELF}" --set-soname "libril-samsung.so" "${BLOB_ROOT}/vendor/lib64/libril-samsung.so"
+    # libalsa7870.so
+    # replace so name
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libalsa7870.so"
 
-#sed -i 's|memtrack.universal7880.so|memtrack.universal7870.so|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/hw/memtrack.universal7870.so"
-#sed -i 's|memtrack.universal7880.so|memtrack.universal7870.so|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/hw/memtrack.universal7870.so"
+    # downgrade libaudior7870 to a helper lib.
 
-# prebuilt bsp
+    # Always add a f to the function symbol to avoid duplicate declaration. Force audio hal to never call those functions.
+    # Original Sec audioroute has functions that are needed as a helper and not found in aosp. (Im too lazy to reverseng those, so use them as they are from stock rom lib)
 
-# (lib64/omx/)
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/libExynosOMX_Core.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
-#sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
+    #/* Initialize and free the audio routes */
+    #struct audio_route *audio_route_init(unsigned int card, const char *xml_path);
 
-# (lib/omx/)
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/libExynosOMX_Core.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
-#sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_init|audio_route_inif|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #void audio_route_free(struct audio_route *ar);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_free|audio_route_fref|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* Apply an audio route path by name */
+    #int audio_route_apply_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ### sed -i 's|audio_route_apply_path|audio_route_apply_patf|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Apply and update mixer with audio route path by name */
+    #int audio_route_apply_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ### sed -i 's|audio_route_apply_and_update_path|audio_route_apply_and_update_patf|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset an audio route path by name */
+    #int audio_route_reset_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ### sed -i 's|audio_route_reset_path|audio_route_reset_patf|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset and update mixer with audio route path by name */
+    #int audio_route_reset_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ### sed -i 's|audio_route_reset_and_update_path|audio_route_reset_and_update_patf|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset and update mixer with audio route path by name forcely */
+    #int audio_route_force_reset_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ### sed -i 's|audio_route_force_reset_and_update_path|audio_route_force_reset_and_update_patf|g' "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset the audio routes back to the initial state */
+    #void audio_route_reset(struct audio_route *ar);
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_reset|audio_route_resef|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_reset|audio_route_resef|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* Update the mixer with any changed values */
+    #int audio_route_update_mixer(struct audio_route *ar);
+
+   # add f to rename/Invalidate the function
+   #sed -i 's|audio_route_update_mixer|audio_route_update_mixef|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+   #/* Get pcm-dai information */
+   #int get_dai_link(struct audio_route *ar, enum pcm_dai_link dai_link);
+
+   # add f to rename/Invalidate the function
+   #sed -i 's|get_dai_link|get_dai_linf|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+   #/* return number of missing control */
+   #int audio_route_missing_ctl(struct audio_route *ar);
+
+   # add f to rename/Invalidate the function
+   #sed -i 's|audio_route_missing_ctl|audio_route_missing_ctf|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+   # "${PATCHELF}" --add-needed "libaudioroute_sec_helper.so" "${BLOB_ROOT_AUDIO_M10LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
+
+   # "${PATCHELF}" --add-needed "libtinyalsa_sec.so" "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
+
+   # "${PATCHELF}" --add-needed "libtinyalsa_sec.so" "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libpreprocessing_nxp.so"
+
+    fi
+    
+    if [[ "$COMMON_NAME" == a6lte_audio ]]; then
+    BLOB_ROOT_AUDIO_A6LTE="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_AUDIO_A6LTE}"
+
+    # replace libtinyalsa with renamed one
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
+
+    # replace libaudioroute with renamed one
+    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
+
+    # libpreprocessing_nxp.so
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libpreprocessing_nxp.so"
+
+    # libaudior7870.so
+    # replace libtinyalsa with renamed one
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    # replace so name
+    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    # libalsa7870.so
+    # replace so name
+    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libalsa7870.so"
+
+    # downgrade libaudior7870 to a helper lib.
+
+    # Always add a f to the function symbol to avoid duplicate declaration. Force audio hal to never call those functions.
+    # Original Sec audioroute has functions that are needed as a helper and not found in aosp. (Im too lazy to reverseng those, so use them as they are from stock rom lib)
+
+    #/* Initialize and free the audio routes */
+    #struct audio_route *audio_route_init(unsigned int card, const char *xml_path);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_init|audio_route_inif|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #void audio_route_free(struct audio_route *ar);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_free|audio_route_fref|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* Apply an audio route path by name */
+    #int audio_route_apply_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ###sed -i 's|audio_route_apply_path|audio_route_apply_patf|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Apply and update mixer with audio route path by name */
+    #int audio_route_apply_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ###sed -i 's|audio_route_apply_and_update_path|audio_route_apply_and_update_patf|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset an audio route path by name */
+    #int audio_route_reset_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ###sed -i 's|audio_route_reset_path|audio_route_reset_patf|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset and update mixer with audio route path by name */
+    #int audio_route_reset_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ###sed -i 's|audio_route_reset_and_update_path|audio_route_reset_and_update_patf|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset and update mixer with audio route path by name forcely */
+    #int audio_route_force_reset_and_update_path(struct audio_route *ar, const char *name);
+
+    # add f to rename/Invalidate the function
+    ###sed -i 's|audio_route_force_reset_and_update_path|audio_route_force_reset_and_update_patf|g' "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/libaudior7870.so"
+
+    #/* Reset the audio routes back to the initial state */
+    #void audio_route_reset(struct audio_route *ar);
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_reset|audio_route_resef|g' "${BLOB_ROOT}/M10LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_reset|audio_route_resef|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* Update the mixer with any changed values */
+    #int audio_route_update_mixer(struct audio_route *ar);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_update_mixer|audio_route_update_mixef|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* Get pcm-dai information */
+    #int get_dai_link(struct audio_route *ar, enum pcm_dai_link dai_link);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|get_dai_link|get_dai_linf|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    #/* return number of missing control */
+    #int audio_route_missing_ctl(struct audio_route *ar);
+
+    # add f to rename/Invalidate the function
+    #sed -i 's|audio_route_missing_ctl|audio_route_missing_ctf|g' "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libaudior7870.so"
+
+    # "${PATCHELF}" --add-needed "libaudioroute_sec_helper.so" "${BLOB_ROOT_AUDIO_A6LTE}/vendor/lib/hw/audio.primary.exynos7870.so"
 
 
-#Original
-#0000:60A0 |                 73 79 73  2F 64 65 76  69 63 65 73 |      sys/devices
-#0000:60B0 | 2F 00 31 34  38 33 30 30  30 30 2E 64  65 63 6F 6E | /.14830000.decon
-#0000:60C0 | 5F 66 2F 76  73 79 6E 63  00 31 34 38  36 30 30 30 | _f/vsync.1486000
-#0000:60D0 | 30 2E 73 79  73 6D 6D 75  2F 31 34 38  36 30 30 30 | 0.sysmmu/1486000
-#0000:60E0 | 30 2E 73 79  73 6D 6D 75  2F 00 65 78  79 6E 6F 73 | 0.sysmmu/.exynos
-#0000:60F0 | 35 2D 66 62  2E 31 2F 76  73 79 6E 63  00 70 6C 61 | 5-fb.1/vsync.pla
-#0000:6100 | 74 66 6F 72  6D 2F 65 78  79 6E 6F 73  2D 73 79 73 | tform/exynos-sys
-#0000:6110 | 6D 6D 75 2E  33 30 2F 65  78 79 6E 6F  73 2D 73 79 | mmu.30/exynos-sy
-#0000:6120 | 73 6D 6D 75  2E 31 31 2F  00 66 61 69  6C 65 64 20 | smmu.11/.failed 
+    # "${PATCHELF}" --add-needed "libtinyalsa_sec.so" "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/hw/audio.primary.exynos7870.so"
+
+    # "${PATCHELF}" --add-needed "libtinyalsa_sec.so" "${BLOB_ROOT}/A6LTE_AUDIO/vendor/lib/libpreprocessing_nxp.so"
+    fi
+    
 
 
-#Changed:
-#0000:60A0 |                 73 79 73  2F 64 65 76  69 63 65 73 |      sys/devices
-#0000:60B0 | 2F 00 31 34  38 33 30 30  30 30 2E 64  65 63 6F 6E | /.14830000.decon
-#0000:60C0 | 5F 66 62 2F  76 73 79 6E  63 00 31 34  38 35 30 30 | _fb/vsync.148500
-#0000:60D0 | 30 30 2E 73  79 73 6D 6D  75 2F 31 34  38 35 30 30 | 00.sysmmu/148500
-#0000:60E0 | 30 30 2E 73  79 73 6D 6D  75 2F 00 65  78 79 6E 6F | 00.sysmmu/.exyno
-#0000:60F0 | 73 35 2D 66  62 2E 31 2F  76 73 79 6E  63 00 70 6C | s5-fb.1/vsync.pl
-#0000:6100 | 61 74 66 6F  72 6D 2F 65  78 79 6E 6F  73 2D 73 79 | atform/exynos-sy
-#0000:6110 | 73 6D 6D 75  2E 33 30 2F  65 78 79 6E  6F 73 2D 73 | smmu.30/exynos-s
-#0000:6120 | 79 73 6D 6D  75 2E 31 31  2F 00 66 61  69 6C 64 20 | ysmmu.11/.faild 
+    # audio.primary.exynos7870.so
 
-# sed -i 's|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x65\x64\x20|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x62\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x64\x20|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib/hw/hwcomposer.exynos7870.so"
+    # check path
 
-# sed -i 's|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x65\x64\x20|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x62\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x64\x20|g' "${BLOB_ROOT}/ARM64_PROPRIETARY_BSP/vendor/lib64/hw/hwcomposer.exynos7870.so"
+    if [[ "$COMMON_NAME" == a7y17lte_bsp ]]; then
+    BLOB_ROOT_A7Y17LTE_BSP="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_A7Y17LTE_BSP}"
 
-# rild
-"${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT}/vendor/bin/hw/rild"
+    # libril-samsung.so | setting so name with patchelf breaks the lib
+    #"${PATCHELF}" --set-soname "libril-samsung.so" "${BLOB_ROOT}/vendor/lib/libril-samsung.so"
+    #"${PATCHELF}" --set-soname "libril-samsung.so" "${BLOB_ROOT}/vendor/lib64/libril-samsung.so"
 
-# libsec-ril.so
-"${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT}/vendor/lib64/libsec-ril.so"
-"${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT}/vendor/lib64/libsec-ril.so"
-"${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT}/vendor/lib/libsec-ril.so" 
-"${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT}/vendor/lib/libsec-ril.so"
+    sed -i 's|memtrack.universal7880.so|memtrack.universal7870.so|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/hw/memtrack.exynos7870.so"
+    sed -i 's|memtrack.universal7880.so|memtrack.universal7870.so|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/hw/memtrack.exynos7870.so"
 
-# libsec-ril-dsds.so
-"${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT}/vendor/lib64/libsec-ril-dsds.so"
-"${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT}/vendor/lib64/libsec-ril-dsds.so"
-"${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT}/vendor/lib/libsec-ril-dsds.so"
-"${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT}/vendor/lib/libsec-ril-dsds.so"
+    # prebuilt bsp
 
-# libsensorlistener.so
-# shim needed by camera | not needed shipping prepatched version
-#"${PATCHELF}" --add-needed "libshim_sensorndkbridge.so" "${BLOB_ROOT}/vendor/lib/libsensorlistener.so"
-#"${PATCHELF}" --add-needed "libshim_sensorndkbridge.so" "${BLOB_ROOT}/vendor/lib64/libsensorlistener.so"
+    # (lib64/omx/)
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/libExynosOMX_Core.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
+
+    # (lib/omx/)
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/libExynosOMX_Core.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
+#
+
+    #Original
+    #0000:60A0 |                 73 79 73  2F 64 65 76  69 63 65 73 |      sys/devices
+    #0000:60B0 | 2F 00 31 34  38 33 30 30  30 30 2E 64  65 63 6F 6E | /.14830000.decon
+    #0000:60C0 | 5F 66 2F 76  73 79 6E 63  00 31 34 38  36 30 30 30 | _f/vsync.1486000
+    #0000:60D0 | 30 2E 73 79  73 6D 6D 75  2F 31 34 38  36 30 30 30 | 0.sysmmu/1486000
+    #0000:60E0 | 30 2E 73 79  73 6D 6D 75  2F 00 65 78  79 6E 6F 73 | 0.sysmmu/.exynos
+    #0000:60F0 | 35 2D 66 62  2E 31 2F 76  73 79 6E 63  00 70 6C 61 | 5-fb.1/vsync.pla
+    #0000:6100 | 74 66 6F 72  6D 2F 65 78  79 6E 6F 73  2D 73 79 73 | tform/exynos-sys
+    #0000:6110 | 6D 6D 75 2E  33 30 2F 65  78 79 6E 6F  73 2D 73 79 | mmu.30/exynos-sy
+    #0000:6120 | 73 6D 6D 75  2E 31 31 2F  00 66 61 69  6C 65 64 20 | smmu.11/.failed 
+
+
+    #Changed:
+    #0000:60A0 |                 73 79 73  2F 64 65 76  69 63 65 73 |      sys/devices
+    #0000:60B0 | 2F 00 31 34  38 33 30 30  30 30 2E 64  65 63 6F 6E | /.14830000.decon
+    #0000:60C0 | 5F 66 62 2F  76 73 79 6E  63 00 31 34  38 35 30 30 | _fb/vsync.148500
+    #0000:60D0 | 30 30 2E 73  79 73 6D 6D  75 2F 31 34  38 35 30 30 | 00.sysmmu/148500
+    #0000:60E0 | 30 30 2E 73  79 73 6D 6D  75 2F 00 65  78 79 6E 6F | 00.sysmmu/.exyno
+    #0000:60F0 | 73 35 2D 66  62 2E 31 2F  76 73 79 6E  63 00 70 6C | s5-fb.1/vsync.pl
+    #0000:6100 | 61 74 66 6F  72 6D 2F 65  78 79 6E 6F  73 2D 73 79 | atform/exynos-sy
+    #0000:6110 | 73 6D 6D 75  2E 33 30 2F  65 78 79 6E  6F 73 2D 73 | smmu.30/exynos-s
+    #0000:6120 | 79 73 6D 6D  75 2E 31 31  2F 00 66 61  69 6C 64 20 | ysmmu.11/.faild 
+
+    sed -i 's|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x65\x64\x20|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x62\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x64\x20|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib/hw/hwcomposer.exynos7870.so"
+
+    # sed -i 's|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x36\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x65\x64\x20|\x73\x79\x73\x2F\x64\x65\x76\x69\x63\x65\x73\x2F\x00\x31\x34\x38\x33\x30\x30\x30\x30\x2E\x64\x65\x63\x6F\x6E\x5F\x66\x62\x2F\x76\x73\x79\x6E\x63\x00\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x31\x34\x38\x35\x30\x30\x30\x30\x2E\x73\x79\x73\x6D\x6D\x75\x2F\x00\x65\x78\x79\x6E\x6F\x73\x35\x2D\x66\x62\x2E\x31\x2F\x76\x73\x79\x6E\x63\x00\x70\x6C\x61\x74\x66\x6F\x72\x6D\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x33\x30\x2F\x65\x78\x79\x6E\x6F\x73\x2D\x73\x79\x73\x6D\x6D\x75\x2E\x31\x31\x2F\x00\x66\x61\x69\x6C\x64\x20|g' "${BLOB_ROOT_A7Y17LTE_BSP}/vendor/lib64/hw/hwcomposer.exynos7870.so"
+
+    fi
+
+    if [[ "$COMMON_NAME" == gracerlte ]]; then
+    BLOB_ROOT_GRACERLTE_BSP="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_GRACERLTE_BSP}"
+    
+    # (lib64/omx/) no patches needed here
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/libExynosOMX_Core.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib64|vendor/lib64|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib64/omx/libOMX.Exynos.MPEG4.Decoder.so"
+
+    # (lib/omx/)
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/libExynosOMX_Core.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.AVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP9.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.HEVC.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.WMV.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.VP8.Decoder.so"
+    #sed -i 's|system/lib|vendor/lib|g' "${BLOB_ROOT_GRACERLTE_BSP}/vendor/lib/omx/libOMX.Exynos.MPEG4.Decoder.so"
+
+    # Add other gracerlte specific patches as needed
+    fi
+
+    if [[ "$COMMON_NAME" == starlte_radio ]]; then
+    BLOB_ROOT_STARLTE_SEC_RADIO="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_STARLTE_SEC_RADIO}"
+
+    # rild
+    "${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/bin/hw/rild"
+
+    # libsec-ril.so
+    "${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib64/libsec-ril.so"
+    "${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib64/libsec-ril.so"
+    "${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib/libsec-ril.so" 
+    "${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib/libsec-ril.so"
+
+    # libsec-ril-dsds.so
+    "${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib64/libsec-ril-dsds.so"
+    "${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib64/libsec-ril-dsds.so"
+    "${PATCHELF}" --replace-needed "libril.so" "libril-samsung.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib/libsec-ril-dsds.so"
+    "${PATCHELF}" --add-needed "libcutils_shim_vendor.so" "${BLOB_ROOT_STARLTE_SEC_RADIO}/vendor/lib/libsec-ril-dsds.so"
+    fi
+
+    if [[ "$COMMON_NAME" == m10lte ]]; then
+    BLOB_ROOT_M10LTE="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_M10LTE}"
+
+    # camera.vendor.exynos7870.so
+    "${PATCHELF}" --replace-needed "libcamera_client.so" "libcamera_metadata_helper.so" "${BLOB_ROOT_M10LTE}/vendor/lib/hw/camera.vendor.exynos7870.so"
+    "${PATCHELF}" --replace-needed "libgui.so" "libgui_vendor.so" "${BLOB_ROOT_M10LTE}/vendor/lib/hw/camera.vendor.exynos7870.so"
+    "${PATCHELF}" --add-needed "libexynoscamera_shim.so" "${BLOB_ROOT_M10LTE}/vendor/lib/hw/camera.vendor.exynos7870.so"
+
+    # libsensorlistener.so
+    # shim needed by camera
+    "${PATCHELF}" --add-needed "libshim_sensorndkbridge.so" "${BLOB_ROOT_M10LTE}/vendor/lib/libsensorlistener.so"
+    fi
+    
+    if [[ "$COMMON_NAME" == a7y17lte ]]; then
+    BLOB_ROOT_A7Y17LTE="${!mk_root_varname}/proprietary"
+    echo "Patching files in: ${BLOB_ROOT_A7Y17LTE}"
+
+    # Replace protobuf with vndk29 compat libs for specified libs
+    "${PATCHELF}" --replace-needed libprotobuf-cpp-lite.so libprotobuf-cpp-lite-v29.so "${BLOB_ROOT_A7Y17LTE}/vendor/lib/libwvhidl.so"
+    "${PATCHELF}" --replace-needed libprotobuf-cpp-lite.so libprotobuf-cpp-lite-v29.so "${BLOB_ROOT_A7Y17LTE}/vendor/lib/mediadrm/libwvdrmengine.so"
+    fi
+done
 
 "${MY_DIR}/setup-makefiles.sh"

@@ -32,47 +32,12 @@
 #include <samsung_audio.h>
 
 #include "audio_hw.h"
+#include "voice_def.h"
 #include "voice.h"
 
 #ifdef AUDIENCE_EARSMART_IC
 #include "audience.h"
 #endif
-
-static struct pcm_config pcm_config_voicecall = {
-    .channels = 2,
-    .rate = 8000,
-    .period_size = CAPTURE_PERIOD_SIZE_LOW_LATENCY,
-    .period_count = CAPTURE_PERIOD_COUNT_LOW_LATENCY,
-    .format = PCM_FORMAT_S16_LE,
-};
-
-static struct pcm_config pcm_config_voicecall_wideband = {
-    .channels = 2,
-    .rate = 16000,
-    .period_size = CAPTURE_PERIOD_SIZE_LOW_LATENCY,
-    .period_count = CAPTURE_PERIOD_COUNT_LOW_LATENCY,
-    .format = PCM_FORMAT_S16_LE,
-};
-
-struct pcm_config pcm_config_voice_sco = {
-    .channels = 1,
-    .rate = SCO_DEFAULT_SAMPLING_RATE,
-    .period_size = SCO_PERIOD_SIZE,
-    .period_count = SCO_PERIOD_COUNT,
-    .format = PCM_FORMAT_S16_LE,
-};
-
-struct pcm_config pcm_config_voice_sco_wb = {
-    .channels = 1,
-    .rate = SCO_WB_SAMPLING_RATE,
-    .period_size = SCO_PERIOD_SIZE,
-    .period_count = SCO_PERIOD_COUNT,
-    .format = PCM_FORMAT_S16_LE,
-};
-
-/* Prototypes */
-int start_voice_call(struct audio_device *adev);
-int stop_voice_call(struct audio_device *adev);
 
 void set_voice_session_audio_path(struct voice_session *session)
 {
@@ -102,6 +67,10 @@ void set_voice_session_audio_path(struct voice_session *session)
             device_type = SOUND_AUDIO_PATH_EARPIECE;
             break;
     }
+
+    /* Set ril->connect_required as false to make the connection optional
+       its not working properly with current universal7870 vendor*/
+    session->ril.connect_required = false;
 
     ALOGV("%s: ril_set_call_audio_path(%d)", __func__, device_type);
 
@@ -328,8 +297,9 @@ void stop_voice_session(struct voice_session *session)
 void set_voice_session_volume(struct voice_session *session, float volume)
 {
     enum _SoundType sound_type;
+    audio_devices_t device = session->out_device;
 
-    switch (session->out_device) {
+    switch (device) {
         case AUDIO_DEVICE_OUT_EARPIECE:
             sound_type = SOUND_TYPE_VOICE;
             break;
@@ -346,7 +316,12 @@ void set_voice_session_volume(struct voice_session *session, float volume)
             sound_type = SOUND_TYPE_BTVOICE;
             break;
         default:
-            sound_type = SOUND_TYPE_VOICE;
+            // Handle AUDIO_DEVICE_OUT_ALL_SCO as a bitmask check
+            if (device & AUDIO_DEVICE_OUT_ALL_SCO) {
+                sound_type = SOUND_TYPE_BTVOICE;
+            } else {
+                sound_type = SOUND_TYPE_VOICE;
+            }
     }
 
     ril_set_call_volume(&session->ril, sound_type, volume);

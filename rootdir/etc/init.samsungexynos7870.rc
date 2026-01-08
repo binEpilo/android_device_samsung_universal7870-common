@@ -847,6 +847,8 @@ on fs
 # Permissions for TouchScreen
     chown system radio /sys/class/sec/tsp/cmd
     chown system radio /sys/class/sec/tsp/cmd2
+    chmod 0664 /sys/class/sec/tsp/cmd
+    chmod 0664 /sys/class/sec/tsp/cmd2
     chown system system /sys/class/sec/tsp/input/enabled
     chown system system /sys/class/sec/tsp/ito_check
     chown system system /sys/class/sec/tsp/raw_check

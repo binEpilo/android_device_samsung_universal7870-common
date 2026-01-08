@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The LineageOS Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,14 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define LOG_TAG "android.hardware.gatekeeper@1.0-service"
 
-#include <ui/Size.h>
+#include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
 
-using namespace android;
+#include <hidl/LegacySupport.h>
 
-extern "C" {
+// Generated HIDL files
+using android::hardware::gatekeeper::V1_0::IGatekeeper;
+using android::hardware::defaultPassthroughServiceImplementation;
 
-ui::Size _ZN7android2ui4Size7INVALIDE;
-
-
+int main() {
+    return defaultPassthroughServiceImplementation<IGatekeeper>();
 }

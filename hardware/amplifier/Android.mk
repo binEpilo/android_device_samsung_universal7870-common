@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ifeq ($(BOARD_USES_EXYNOS7870_TFA_AMP),true)
+ifeq ($(BOARD_USE_SPKAMP),true)
 
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_ARM_MODE := arm
-
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libutils \
 	libcutils \
-    libhardware \
+        libhardware \
 	libtinyalsa
 
 LOCAL_C_INCLUDES := \
@@ -46,6 +44,7 @@ LOCAL_CFLAGS += -DPREPROCESSING_ENABLED
 
 LOCAL_MODULE := audio_amplifier.$(TARGET_BOOTLOADER_BOARD_NAME)
 LOCAL_VENDOR_MODULE := true
+LOCAL_MULTILIB := 32
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_TAGS := optional
 

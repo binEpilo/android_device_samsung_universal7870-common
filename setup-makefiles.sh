@@ -1,14 +1,19 @@
 #!/bin/bash
 #
-# Copyright (C) 2017-2021 The LineageOS Project
+# Copyright (C) 2017-2024 The LineageOS Project
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 
 set -e
 
+# new codename
 DEVICE_COMMON=universal7870-common
 VENDOR=samsung
+VENDOR_UNIVERSAL7870_COMMON="${VENDOR}/universal7870-common"
+TOOLS_DIR="vendor-tools"
+
+OUTDIR=vendor/$VENDOR/$DEVICE_COMMON
 
 export INITIAL_COPYRIGHT_YEAR=2017
 
@@ -21,368 +26,535 @@ OUTDIR=vendor/$VENDOR/$DEVICE_COMMON
 ANDROID_ROOT="${MY_DIR}/../../.."
 HELPER="${ANDROID_ROOT}/tools/extract-utils/extract_utils.sh"
 
+# VENDOR_MK_ROOT
+VENDOR_MK_ROOT_INTERNAL="${ANDROID_ROOT}"/vendor/"${VENDOR}"
 VENDOR_MK_ROOT="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${DEVICE_COMMON}"
 
 # BLOB_ROOT
-BLOB_ROOT="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${DEVICE_COMMON}"/proprietary
+BLOB_ROOT="${VENDOR_MK_ROOT}"/proprietary
+
 
 if [ ! -f "${HELPER}" ]; then
     echo "Unable to find helper script at ${HELPER}"
     exit 1
 fi
 
-generate_prop_files_array() {
-# The path to vendor-tools directory
-    local vendor_tools_dir="$1"
-# Declare PROP_FILES as a global associative array    
-    declare -gA PROP_FILES
+###################################################################################
+# The function 'generate_prop_files_array' takes a path directory as an argument.
+# It locates all files within directory that match 'proprietary-files_*.txt'.
+# Each of these files is added to a global associative array named 'PROP_FILES'.
+# The filename is set as the key and the value is set as an empty string.
+#
+# PROP_FILES["proprietary-files_a6lte.txt"]=""                                                             
+# PROP_FILES["proprietary-files_m10lte.txt"]=""
+###################################################################################
 
-# List all 'proprietary-files_*.txt' files in the vendor-tools directory
+
+generate_prop_files_array() {
+    # The path to vendor-tools directory
+    local vendor_tools_dir="$1"
+    # Declare PROP_FILES as a global associative array    
+    declare -gA PROP_FILES
+    # Declare INTERNAL_DEVICE_COMMON as a global associative array
+    declare -gA INTERNAL_DEVICE_COMMON
+
+    # Declare PROP_CODENAMES as a global associative array
+    declare -gA PROP_CODENAMES
+
+    # List all 'proprietary-files_*.txt' files in the vendor-tools directory
     local files=(${vendor_tools_dir}/proprietary-files_*.txt)
     for file_path in "${files[@]}"; do
         if [[ -f "$file_path" ]]; then
             local filename=$(basename "$file_path")
-# Add to associative array with empty value            
+            # Add to PROP_FILES associative array with empty value            
             PROP_FILES["$filename"]=""
+
+            # Extract the part after 'proprietary-files_' and before '.txt'
+            local name_part=${filename#proprietary-files_}
+            name_part=${name_part%.txt}
+            # Add to INTERNAL_DEVICE_COMMON associative array with filename as key
+            INTERNAL_DEVICE_COMMON["$filename"]="$name_part"
+
+            # Extract and process codename
+            local codename=$(echo "$name_part" | cut -d'_' -f1)
+            if [[ "$codename" != "common" ]]; then
+                PROP_CODENAMES["$codename"]=""
+            fi
         fi
     done
-}
 
-generate_prop_files_array "${MY_DIR}/vendor-tools"
+    # Generate INTERNAL_VENDOR_MK_ROOT
+    for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+        name="${INTERNAL_DEVICE_COMMON[$key]}"
+        root_name="INTERNAL_VENDOR_MK_ROOT_${name}"
 
-# common helper
-source "${HELPER}"
-
-# Initialize the helper
-setup_vendor "${DEVICE_COMMON}" "${VENDOR}" "${ANDROID_ROOT}" true
-
-# Warning headers and guards
-write_headers "a3y17lte a5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte"
-
-mkdir -p "${MY_DIR}/vendor-tools/unified_proprietary"
-mkdir -p "${MY_DIR}/vendor-tools/ununified_proprietary_no_guards"
-mkdir -p "${MY_DIR}/vendor-tools/ununified_proprietary_guards"
-
-fixup_product_copy_files() {
-    local condition="$1"
-    local extra_folder="$2"
-    local file="$3"
-    local block_start="ifeq (\$(${condition}),true)"
-    local block_end="endif # ${condition}"
-    local in_block=false
-    local only_once=false
-    
-    # Create a temporary file
-    local temp_file=$(mktemp)
-
-    # Read through the original file and copy content to the temp file, excluding the old block
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == "$block_start" ]]; then
-            # Start of block to modify, skip copying this line and everything until 'endif'
-            in_block=true
-            # Also, start capturing the new condition block to insert later
-            echo "$line" >> "$temp_file"
-            continue
-        elif [[ "$line" == "$block_end" ]] && [[ "$in_block" == true ]]; then
-            # End of block, skip copying and reset the in_block flag
-            echo "$line" >> "$temp_file"
-            in_block=false
-            continue
-        fi
-        
-        # If not inside the block, or after the block ended, copy the line as is
-        if ! $in_block; then
-            echo "$line" >> "$temp_file"
-        elif [[ $in_block ]] && [[ "$line" =~ ^[[:space:]]*vendor/samsung/ ]]; then
-            # Lines within the block that need to be modified
-            line=${line/vendor\/samsung\/universal7870-common\/proprietary/vendor\/samsung\/universal7870-common\/proprietary\/$extra_folder}
-            
-            if ! $only_once ; then
-            	only_once=true
-            	echo 'PRODUCT_COPY_FILES += \' >> "$temp_file"
-            	continue
-            fi
-            echo "$line" >> "$temp_file"
-        fi
-    done < "$file"
-    
-    echo 'endif' >> "$temp_file"
-    
-    # Overwrite the original file with the new temp file
-    mv "$temp_file" "$file"
-
-    echo "Fixup complete for $condition block."
-}
-
-# create_local_module() {
-# (cat << EOF) >> $ANDROID_ROOT/$OUTDIR/Android.mk
-# include \$(CLEAR_VARS)
-# LOCAL_MODULE := $MY_LOCAL_MODULE
-# LOCAL_MODULE_OWNER := $VENDOR
-# LOCAL_VENDOR_MODULE := true
-# LOCAL_SRC_FILES_32 := $MY_LOCAL_TYPE/\$(LOCAL_AUDIO_VARIANT_DIR)/$MY_LOCAL_PATH/$MY_LOCAL_FILE
-# LOCAL_MODULE_TAGS := optional
-# LOCAL_MODULE_SUFFIX := .so
-# LOCAL_MULTILIB := 32
-# LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-# LOCAL_SHARED_LIBRARIES := $MY_LOCAL_SHARED_LIBRARIES
-# include \$(BUILD_PREBUILT)
-# endif
-# EOF
-#
-#}
-
-
-create_local_shared_libraries() {
-    # Ensure there's an argument provided
-    if [[ -z "$1" ]]; then
-        echo "Error: No ELF file provided."
-        return 1
-    fi
-    
-    # The ELF file to inspect
-    local elf_file="$1"
-
-    # Check that the ELF file exists
-    if [[ ! -f "$elf_file" ]]; then
-        echo "Error: The specified ELF file does not exist: $elf_file"
-        return 1
-    fi
-    
-    # Use patchelf to get a list of NEEDED entries (shared libraries)
-    local libraries=$(patchelf --print-needed "$elf_file" | sed 's/\.so$//')
-
-    # Define the LOCAL_SHARED_LIBRARIES variable
-    echo "LOCAL_SHARED_LIBRARIES := \\"
-    # Iterate over each library and add it to the variable definition
-    local delim=""
-    for library in $libraries; do
-        echo -n "$delim$library"
-        delim=" \\\n    " # Set delimiter for subsequent lines
+        declare -g "${root_name}=${ANDROID_ROOT}/vendor/${VENDOR}/${name}"
     done
-    echo # Append final newline
-}
-
-
-cleanup_product_copy_files() {
-    # Input
-    if [[ -z "$1" ]]; then
-        echo "Error: No input file provided."
-        return 1
-    fi
-
-    # Neverallow product copy files
-    local libraries=(
-        libaudior7870
-        libLifevibes_lvverx
-        libLifevibes_lvvetx
-        libpreprocessing_nxp
-        librecordalive
-        libtfa98xx
-        libsamsungDiamondVoice
-        libSamsungPostProcessConvertor
-        lib_SamsungRec_06004
-        lib_SamsungRec_06006
-        libsecaudioinfo
-        lib_soundaliveresampler
-        lib_SoundAlive_SRC384_ver320
-        libalsa7870
-        audio.primary.exynos7870
-        libGLES_mali
-        Tfa9896.cnt
-        libvndsecril-client
-    )
-
-    # The file to cleanup
-    local input_mk="$1"
-    local output_mk="${input_mk}.clean"
-
-    # Ensure the file exists
-    if [[ ! -f "$input_mk" ]]; then
-        echo "Error: The file $input_mk does not exist."
-        return 1
-    fi
-
-    # Read each line of the file and remove lines containing the specified libraries
-    while IFS= read -r line; do
-        local write_line="true"
-        for lib in "${libraries[@]}"; do
-            if [[ "$line" == *"$lib"* ]]; then
-                write_line="false"
-                break
-            fi
-        done
-        if [[ "$write_line" == "true" ]]; then
-            echo "$line" >> "$output_mk"
-        fi
-    done < "$input_mk"
-
-    # Replace the input file with output
-    mv "$output_mk" "$input_mk"
-
-    echo "Cleanup product copy files on $input_mk completed."
-}
-
-fixup_endif() {
-    # Input validation
-    if [[ -z "$1" ]]; then
-        echo "Error: No input file provided."
-        return 1
-    fi
-
-    # The file to fix up
-    local input_mk="$1"
-    local output_mk="${input_mk}.tmp"
-
-    # Check the file existence
-    if [[ ! -f "$input_mk" ]]; then
-        echo "Error: The file $input_mk does not exist."
-        return 1
-    fi
-
-    # Variable to hold the previous line's content
-    local prev_line=""
-
-    # Read each line of the file while preserving white spaces
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        
-        # If the current line is 'endif' and the previous line ends with a '\'
-        if [[ "$line" == "endif" ]] && [[ "$prev_line" == *"\\" ]]; then
-            # Remove the backslash from the end of the previous line
-            prev_line="${prev_line%\\}"
-        fi
-        
-        # If there's a non-empty previous line, write it to the output
-        if [[ -n "$prev_line" ]]; then
-            printf "%s\n" "$prev_line" >> "$output_mk"
-        fi
-        
-        # Set the previous line to the current line for the next iteration
-        prev_line="$line"
-    done < "$input_mk"
-
-    # Write the last line if it's not 'endif' (since it wouldn't be followed by another line to trigger removal of '\')
-    if [[ -n "$prev_line" && "$prev_line" != "endif" ]]; then
-        printf "%s\n" "$prev_line" >> "$output_mk"
-    fi
-
-    # Move the temporary output file to overwrite the original input file
-    mv "$output_mk" "$input_mk"
-
-    echo "Fixup on $input_mk completed."
-}
-
-
-
-process_guard_proprietary_files() {
-    local input_file="${MY_DIR}/vendor-tools/${PROP_FILE}"
-    output_file_guarded="${MY_DIR}/vendor-tools/ununified_proprietary_guards/${PROP_FILE}"
-    output_file_no_guard="${MY_DIR}/vendor-tools/ununified_proprietary_no_guards/${PROP_FILE}"
-
-    if [[ ! -f "$input_file" ]]; then
-        echo "Input file does not exist: $input_file"
-        return 1
-    fi
-
-    local guard_found=false
-    local write_guarded=false
-    local write_no_guard=true
-
-    >> "$output_file_guarded" # Empty the output file in case it exists and has content
-    >> "$output_file_no_guard" # Empty the output file in case it exists and has content
-
-    while IFS= read -r line; do
-        # Check for start and end of guarded sections
-        if [[ "$line" == "# START_GUARD:"* ]]; then
-            guard_found=true
-            write_guarded=true
-            write_no_guard=false
-            continue
-        elif [[ "$line" == "# END_GUARD:"* ]]; then
-            write_guarded=false
-            write_no_guard=true
-            continue
-        fi
-
-        # Write to guarded file if within a guarded section
-        if $write_guarded; then
-            echo "$line" >> "$output_file_guarded"
-        fi
-
-        # Write to no-guard file when outside a guarded section
-        if $write_no_guard && ! $write_guarded; then
-            echo "$line" >> "$output_file_no_guard"
-        fi
-    done < "$input_file"
-       
-    if ! $guard_found; then
-        echo "No guard comments found in the file: $input_file. Skipping guarded output."
-    fi
-}
-
-for PROP_FILE in "${!PROP_FILES[@]}"; do
-    SOURCE_DIR=${PROP_FILES[$PROP_FILE]}
-
-    process_guard_proprietary_files
     
+}
+
+generate_prop_files_array "${MY_DIR}/${TOOLS_DIR}"
+
+for codename in "${!PROP_CODENAMES[@]}"; do
+    base_dir="${MY_DIR}/${TOOLS_DIR}/"
+    codename_dir="${base_dir}/${codename}"
+    generate_prop_files_array "$codename_dir"
 done
 
+
+
+
+
+    # Neverallow product copy files
+    #local libraries=(
+    #    libaudior7870
+    #    libLifevibes_lvverx
+    #    libLifevibes_lvvetx
+    #    libpreprocessing_nxp
+    #    librecordalive
+    #    libtfa98xx
+    #    libsamsungDiamondVoice
+    #    libSamsungPostProcessConvertor
+    #    lib_SamsungRec_06004
+    #    lib_SamsungRec_06006
+    #    libsecaudioinfo
+    #    lib_soundaliveresampler
+    #    lib_SoundAlive_SRC384_ver320
+    #    libalsa7870
+    #    audio.primary.exynos7870
+    #    libGLES_mali
+    #    Tfa9896.cnt
+    #    libvndsecril-client
+    #    libskeymaster3device
+    #    libkeymaster_helper_vendor
+    #    libkeymaster2_mdfpp
+    #    keystore.mdfpp
+    #)
+
+
+# common helper
+# source "${HELPER}"
+
 for PROP_FILE in "${!PROP_FILES[@]}"; do
-    SOURCE_DIR=${PROP_FILES[$PROP_FILE]}
+    # SOURCE_DIR=${PROP_FILES[$PROP_FILE]}
+
+    COMMON_NAME="${INTERNAL_DEVICE_COMMON[$PROP_FILE]}"
+    if [ -z "$COMMON_NAME" ]; then
+    COMMON_NAME="dummy"
+    fi
+
+    # Warning headers and guards
     
     # helper needs to be in loop too to always get relauched with correct options
     source "${HELPER}"
+    
+    # setup_vendor "${DEVICE_COMMON}" "${VENDOR}" "${ANDROID_ROOT}" true
 
-    if [[ "${PROP_FILE}" == "proprietary-files_m10lte.txt" ]]; then
-       echo '# m10lte audio hal' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
-       echo 'ifeq ($(TARGET_DEVICE_HAS_M10LTE_AUDIO_HAL),true)' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
+    setup_vendor "${COMMON_NAME}" "${VENDOR}" "${ANDROID_ROOT}" true
+    
+    if [[ "$PROP_FILE" != proprietary-files_*_audio.txt || "$PROP_FILE" != proprietary-files_a6lte.txt ]]; then
+    write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m10lte j7popelteskt"
+    fi
+
+    if [[ "$PROP_FILE" == "proprietary-files_m10lte_radio.txt" || "$PROP_FILE" == "proprietary-files_a6lte_audio.txt" ]]; then
+    write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m10lte j7popelteskt"
+    fi
+
+    if [[ "$PROP_FILE" == "proprietary-files_oss-prebuilt.txt" ]]; then
+    write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m10lte j7popelteskt"
     fi
     
-    if [[ "${PROP_FILE}" == "proprietary-files_a6lte.txt" ]]; then
-       echo '# a6lte audio hal' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
-       echo 'ifeq ($(TARGET_DEVICE_HAS_A6LTE_AUDIO_HAL),true)' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
+    if [[ "$PROP_FILE" == "proprietary-files_m10lte_audio.txt" ]]; then
+    write_headers "a3y17lte j5y17lte j6lte j7y17lte m10lte gtaxlwifi gtaxllte"
     fi
-
-    # The standard blobs
-    write_makefiles "${MY_DIR}/vendor-tools/ununified_proprietary_guards/${PROP_FILE}" true
     
-    if [[ "${PROP_FILE}" == "proprietary-files_m10lte.txt" ]]; then
-        echo 'endif' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
-        echo "" >> "$ANDROID_ROOT/$OUTDIR/${DEVICE_COMMON}-vendor.mk"
-        fixup_product_copy_files "TARGET_DEVICE_HAS_M10LTE_AUDIO_HAL" "M10LTE_AUDIO" "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+    if [[ "$PROP_FILE" == "proprietary-files_a6lte_audio.txt" ]]; then
+    write_headers "a6lte j7velte j7xelte on7xelte j7popelteskt"
     fi
 
-    if [[ "${PROP_FILE}" == "proprietary-files_a6lte.txt" ]]; then
-        echo 'endif' >> "$VENDOR_MK_ROOT/${DEVICE_COMMON}-vendor.mk"
-        echo "" >> "$ANDROID_ROOT/$OUTDIR/${DEVICE_COMMON}-vendor.mk"
-        fixup_product_copy_files "TARGET_DEVICE_HAS_A6LTE_AUDIO_HAL" "A6LTE_AUDIO" "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+    if [[ "$PROP_FILE" == proprietary-files_gracerlte_bsp_p.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/gracerlte/${PROP_FILE}"
+    write_footers
     fi
 
-    # leave 1 line space before next one
-    echo "" >> "$ANDROID_ROOT/$OUTDIR/${DEVICE_COMMON}-vendor.mk"
+    if [[ "$PROP_FILE" == proprietary-files_oss_hwc.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/oss/${PROP_FILE}"
+    write_footers
+    fi
+
+    if [[ "$PROP_FILE" == proprietary-files_m10lte*.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/m10lte/${PROP_FILE}" true
+    write_footers
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_starlte*.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/starlte/${PROP_FILE}"
+    write_footers
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a6ltep*.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/a6ltep/${PROP_FILE}"
+    write_footers
+    fi
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a6lte*.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6lte.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep_bsp_p.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6ltep.txt ]]; then
+    if [[ "$PROP_FILE" != proprietary-files_a6lte_p.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/a6lte/${PROP_FILE}"
+    write_footers
+    fi
+    fi
+    fi
+    fi
+    fi
+    if [[ "$PROP_FILE" == proprietary-files_a7y17lte*.txt ]]; then
+    write_makefiles "${MY_DIR}/${TOOLS_DIR}/a7y17lte/${PROP_FILE}"
+    write_footers
+    fi
+    
+
+    #if [[ "${PROP_FILE}" == "proprietary-files_m10lte_audio.txt" ]]; then
+    #   echo '# m10lte audio hal' >> "$VENDOR_MK_ROOT_AUDIO_M10LTE/${DEVICE_COMMON_AUDIO_M10LTE}-vendor.mk"
+    #   echo 'ifeq ($(TARGET_DEVICE_HAS_M10LTE_AUDIO_HAL),true)' >> "$VENDOR_MK_ROOT_AUDIO_M10LTE/${DEVICE_COMMON_AUDIO_M10LTE}-vendor.mk"
+    #fi
     
 done
 
-cat ${MY_DIR}/vendor-tools/ununified_proprietary_no_guards/*.txt > "${MY_DIR}/vendor-tools/unified_proprietary/proprietary-files.txt"
+# cp -r ${INTERNAL_VENDOR_MK_ROOT_STARLTE} ${VENDOR_MK_ROOT}
 
-# common helper
-source "${HELPER}"
+DEVICE_COMMON_RADIO="sec_radio" #m10lte_radio #starlte_radio
+DEVICE_COMMON_GNSS="sec_gnss" #a6lte_gnss
+DEVICE_COMMON_TEE="tee" #a6lte_tee
+DEVICE_COMMON_SECAPP="secapp" #a6lte_secapp
+DEVICE_COMMON_SAMSUNG_SLSI="samsung_slsi" #a7y17lte_bsp
+DEVICE_COMMON_SAMSUNG_SLSI_OMX="samsung_slsi_omx" #gracerlte_slsi_p
+DEVICE_COMMON_SAMSUNG_SLSI_OSS="samsung_slsi_oss" #samsung_slsi_oss
+DEVICE_COMMON_SAMSUNG_SLSI_Q="samsung_slsi_q" #a6lte_q_bsp
+DEVICE_COMMON_SAMSUNG_SLSI_P="samsung_slsi_p" #a6lte_p_bsp
+DEVICE_COMMON_KEYMASTER="sec_keymaster" #a6lte_keymaster
+DEVICE_COMMON_TFA_SEC_AUDIO="tfa_sec_audio" #m10lte_audio
+DEVICE_COMMON_SEC_AUDIO="sec_audio" #a6lte_audio
+DEVICE_COMMON_GATEKEEPER_BIOMETRICS="gatekeeper-biometrics" #a6lte_gatekeeper
+DEVICE_COMMON_GATEKEEPER="gatekeeper" #m10lte_gatekeeper
 
-# The standard blobs
-write_makefiles "${MY_DIR}/vendor-tools/unified_proprietary/proprietary-files.txt" true
 
-cleanup_product_copy_files "${ANDROID_ROOT}/${OUTDIR}/${DEVICE_COMMON}-vendor.mk"
-fixup_endif "${ANDROID_ROOT}/${OUTDIR}/${DEVICE_COMMON}-vendor.mk"
+for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    COMMON_NAME="${INTERNAL_DEVICE_COMMON[$key]}"
+    VENDOR_MK_ROOT_INTERNAL_COMMON="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${COMMON_NAME}"
+    
+    mk_root_varname="INTERNAL_VENDOR_MK_ROOT_${COMMON_NAME}"
+    blob_root_varname="BLOB_ROOT_${COMMON_NAME}"
 
-rm -rf "${MY_DIR}/vendor-tools/unified_proprietary"
-rm -rf "${MY_DIR}/vendor-tools/ununified_proprietary_no_guards"
-rm -rf "${MY_DIR}/vendor-tools/ununified_proprietary_guards"
+    # patch every internal device-vendor.mk
+    echo "${VENDOR_MK_ROOT_INTERNAL_COMMON}"
+    #sed -i "s|${DEVICE_COMMON}|${DEVICE_COMMON}/${COMMON_NAME}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+    #sed -i "s|${VENDOR}/${COMMON_NAME}|${VENDOR}/${DEVICE_COMMON}/${COMMON_NAME}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+    sed -i "s|${DEVICE_COMMON}|${DEVICE_COMMON}/${COMMON_NAME}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/*.mk
+    sed -i "s|${VENDOR}/${COMMON_NAME}|${VENDOR}/${DEVICE_COMMON}/${COMMON_NAME}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/*.mk
+    
+    # Using indirect variable reference to get the values
+    #echo "$mk_root_varname:"
+    #echo "${!mk_root_varname}"
+    #echo "$blob_root_varname:"
+    #echo "${!mk_root_varname}/proprietary"
+    
+    if [[ "$COMMON_NAME" == *_radio ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_RADIO}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}"
+
+        # OUR order
+        #a6lte_keymaster
+        #a6lte_gatekeeper
+        #m10lte_gatekeeper
+        #common
+        #starlte
+        #a7y17lte_secapp
+        #a6lte
+        #m10lte_radio
+        #a6lte_secapp
+        #a7y17lte_bsp
+        #m10lte_audio
+        #a7y17lte
+        #m10lte
+        #a6lte_tee
+        #starlte_radio
+        #a6lte_audio
+        #a6lte_gnss
+
+        if [[ "$COMMON_NAME" == m10lte_radio ]]; then
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/Android.mk"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/BoardConfigVendor.mk"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/Android.bp"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/${DEVICE_COMMON_RADIO}-vendor.mk"
+        fi
+
+        if [[ "$COMMON_NAME" == starlte_radio ]]; then
+            sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+            sed -i '1,10d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk"
+            sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk"
+            sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp"
+
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/Android.mk"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/BoardConfigVendor.mk"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/Android.bp"
+            cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/${DEVICE_COMMON_RADIO}-vendor.mk"
+            
+            sed -i "/\b\(libvndsecril-client\)\b/d" "${VENDOR_MK_ROOT}/${DEVICE_COMMON_RADIO}/${DEVICE_COMMON_RADIO}-vendor.mk"
+        fi
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_keymaster ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_KEYMASTER}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_KEYMASTER}/${DEVICE_COMMON_KEYMASTER}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_gatekeeper ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == m10lte_gatekeeper ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_GATEKEEPER}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GATEKEEPER}/${DEVICE_COMMON_GATEKEEPER}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == m10lte_audio ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_TFA_SEC_AUDIO}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}/${DEVICE_COMMON_TFA_SEC_AUDIO}-vendor.mk"
+
+        # remove mali from copy files
+sed -i "/\b\(libLifevibes_lvverx\|libLifevibes_lvvetx\|libpreprocessing_nxp\|librecordalive\|libsamsungDiamondVoice\|libSamsungPostProcessConvertor\|lib_SamsungRec_06006\|libsecaudioinfo\|lib_soundaliveresampler\|lib_SoundAlive_SRC384_ver320\|audio.primary.exynos7870\|libaudior7870\|libalsa7870\|libtfa98xx\)\b/d" \
+"${VENDOR_MK_ROOT}/${DEVICE_COMMON_TFA_SEC_AUDIO}/${DEVICE_COMMON_TFA_SEC_AUDIO}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_audio ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SEC_AUDIO}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}/${DEVICE_COMMON_SEC_AUDIO}-vendor.mk"
+        sed -i "/\b\(libLifevibes_lvverx\|libLifevibes_lvvetx\|libpreprocessing_nxp\|librecordalive\|libsamsungDiamondVoice\|libSamsungPostProcessConvertor\|lib_SamsungRec_06004\|libsecaudioinfo\|lib_soundaliveresampler\|lib_SoundAlive_SRC384_ver320\|audio.primary.exynos7870\|libaudior7870\|libalsa7870\)\b/d" \
+"${VENDOR_MK_ROOT}/${DEVICE_COMMON_SEC_AUDIO}/${DEVICE_COMMON_SEC_AUDIO}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_gnss ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_GNSS}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_GNSS}/${DEVICE_COMMON_GNSS}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_tee ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_TEE}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_TEE}/${DEVICE_COMMON_TEE}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6lte_secapp ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SECAPP}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SECAPP}/${DEVICE_COMMON_SECAPP}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a7y17lte_bsp ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == oss_hwc ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_OSS}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == gracerlte_bsp_p ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_OMX}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}-vendor.mk"
+    fi
+
+    if [[ "$COMMON_NAME" == a6ltep_bsp_p ]]; then
+        sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_P}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk"
+    fi
+
+    #if [[ "$COMMON_NAME" == a6lte_bsp ]]; then
+    #    sed -i "s|${COMMON_NAME}|${DEVICE_COMMON_SAMSUNG_SLSI_Q}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+    #    mkdir -p "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"/proprietary
+    #    cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.mk"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/BoardConfigVendor.mk"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/Android.bp"
+    #    cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk"
+    #fi
+
+    if [[ "$COMMON_NAME" == m10lte || "$COMMON_NAME" == starlte || "$COMMON_NAME" == a7y17lte ]]; then
+        mkdir -p "${VENDOR_MK_ROOT}"/proprietary
+        cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/proprietary "${VENDOR_MK_ROOT}"
+
+        # common
+        sed -i "s|${DEVICE_COMMON}/${COMMON_NAME}|${DEVICE_COMMON}|g" "${VENDOR_MK_ROOT_INTERNAL_COMMON}"/*.mk
+
+        if [[ "$COMMON_NAME" != starlte ]]; then
+        sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk"
+        sed -i '1,10d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk"
+        sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk"
+        sed -i '1,6d' "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp"
+        fi
+
+        #mkdir -p "${VENDOR_MK_ROOT}"
+        #cp -r "${VENDOR_MK_ROOT_INTERNAL_COMMON}" "${VENDOR_MK_ROOT}"
+        touch "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+        touch "${VENDOR_MK_ROOT}/Android.mk"
+        touch "${VENDOR_MK_ROOT}/BoardConfigVendor.mk"
+        touch "${VENDOR_MK_ROOT}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.mk" >> "${VENDOR_MK_ROOT}/Android.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/BoardConfigVendor.mk" >> "${VENDOR_MK_ROOT}/BoardConfigVendor.mk"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/Android.bp" >> "${VENDOR_MK_ROOT}/Android.bp"
+        cat "${VENDOR_MK_ROOT_INTERNAL_COMMON}/${COMMON_NAME}-vendor.mk" >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+    fi
+
+
+    echo "$COMMON_NAME"
+
+#a6lte_keymaster
+#a6lte_gatekeeper
+#m10lte_gatekeeper
+#common
+#starlte
+#a7y17lte_secapp
+#a6lte
+#hello radio
+#m10lte_radio
+#a6lte_secapp
+#a7y17lte_bsp
+#m10lte_audio
+#a7y17lte
+#m10lte
+#a6lte_tee
+#hello radio
+#starlte_radio
+#a6lte_audio
+#a6lte_gnss
+
+done
+
+# remove mali from copy files
+sed -i "/\b\(libGLES_mali\)\b/d" "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+sed -i "/\b\(endif\)\b/d" "${VENDOR_MK_ROOT}/Android.mk"
+
+############################################################################################################
+# CUSTOM PART START (Taken from https://github.com/LineageOS/android_device_samsung_universal7580-common)  #
+############################################################################################################
+(cat << EOF) >> "${VENDOR_MK_ROOT}/${DEVICE_COMMON}-vendor.mk"
+
+# secapp
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SECAPP}/${DEVICE_COMMON_SECAPP}-vendor.mk
+
+# teegris
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_TEE}/${DEVICE_COMMON_TEE}-vendor.mk
+
+# gatekeeper
+ifeq (\$(TARGET_DEVICE_HAS_HW_GATEKEEPER_BIOMETRICS),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}/${DEVICE_COMMON_GATEKEEPER_BIOMETRICS}-vendor.mk
+endif
+
+ifeq (\$(TARGET_DEVICE_HAS_HW_GATEKEEPER_COMMON),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_GATEKEEPER}/${DEVICE_COMMON_GATEKEEPER}-vendor.mk
+endif
+
+# radio
+ifeq (\$(TARGET_DEVICE_HAS_SEC_RIL),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_RADIO}/${DEVICE_COMMON_RADIO}-vendor.mk
+endif
+
+# audio
+ifeq (\$(TARGET_DEVICE_HAS_SEC_AUDIO),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SEC_AUDIO}/${DEVICE_COMMON_SEC_AUDIO}-vendor.mk
+endif
+
+ifeq (\$(TARGET_DEVICE_HAS_TFA_SEC_AUDIO),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_TFA_SEC_AUDIO}/${DEVICE_COMMON_TFA_SEC_AUDIO}-vendor.mk
+endif
+
+# gnss
+ifeq (\$(TARGET_DEVICE_HAS_SEC_GNSS),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_GNSS}/${DEVICE_COMMON_GNSS}-vendor.mk
+endif
+
+# misc
+ifeq (\$(TARGET_DEVICE_HAS_SAMSUNG_SLSI_EXYNOS7870),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI}/${DEVICE_COMMON_SAMSUNG_SLSI}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}/${DEVICE_COMMON_SAMSUNG_SLSI_OMX}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_P}/${DEVICE_COMMON_SAMSUNG_SLSI_P}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}/${DEVICE_COMMON_SAMSUNG_SLSI_Q}-vendor.mk
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}/${DEVICE_COMMON_SAMSUNG_SLSI_OSS}-vendor.mk
+endif
+
+# keymaster & keystore
+ifeq (\$(TARGET_DEVICE_HAS_SEC_KEYMASTER),true)
+-include vendor/samsung/${DEVICE_COMMON}/${DEVICE_COMMON_KEYMASTER}/${DEVICE_COMMON_KEYMASTER}-vendor.mk
+endif
+EOF
 
 
 ############################################################################################################
 # CUSTOM PART START (Taken from https://github.com/LineageOS/android_device_samsung_universal7580-common)  #
 ############################################################################################################
-(cat << EOF) >> $ANDROID_ROOT/$OUTDIR/Android.mk
+(cat << EOF) >> "${VENDOR_MK_ROOT}/Android.mk"
 include \$(CLEAR_VARS)
 LOCAL_MODULE := libGLES_mali
 LOCAL_MODULE_OWNER := samsung
@@ -419,31 +591,39 @@ ALL_MODULES.\$(LOCAL_MODULE).INSTALLED := \\
 include \$(BUILD_PREBUILT)
 
 
-ifeq (\$(TARGET_BOARD_HAS_A6LTE_AUDIO_HAL),true)
-LOCAL_AUDIO_VARIANT_DIR := A6LTE_AUDIO
+ifeq (\$(TARGET_BOARD_HAS_SEC_AUDIO_HAL),true)
+LOCAL_AUDIO_VARIANT_DIR := sec_audio
 LOCAL_SAMSUNGREC_VARIANT := 06004
 LOCAL_USE_STARLTE_VNDSECRIL := true
+LOCAL_EXYNOS7870_AUDIO_GUARD := true
 endif
 
-ifeq (\$(TARGET_BOARD_HAS_M10LTE_AUDIO_HAL),true)
-LOCAL_AUDIO_VARIANT_DIR := M10LTE_AUDIO
+ifeq (\$(TARGET_BOARD_HAS_TFA_SEC_AUDIO_HAL),true)
+LOCAL_AUDIO_VARIANT_DIR := tfa_sec_audio
 LOCAL_SAMSUNGREC_VARIANT := 06006
+LOCAL_USE_STARLTE_VNDSECRIL := true
+LOCAL_USE_TFA_AMP := true
+LOCAL_EXYNOS7870_AUDIO_GUARD := true
+endif
+
+# TFA AUDIO shoud be avaiable when needed
+ifeq (\$(TARGET_AUDIOHAL_VARIANT),samsung-linaro-exynos7870)
+LOCAL_USE_TFA_AMP := true
+LOCAL_AUDIO_VARIANT_DIR := tfa_sec_audio
+LOCAL_USE_STARLTE_VNDSECRIL := true
+endif
+ifeq (\$(TARGET_AUDIOHAL_VARIANT),samsung-exynos7870)
+LOCAL_USE_TFA_AMP := true
+LOCAL_AUDIO_VARIANT_DIR := tfa_sec_audio
 LOCAL_USE_STARLTE_VNDSECRIL := true
 endif
 
-ifeq (\$(TARGET_BOARD_HAS_UNIVERSAL7870_MOBICORE),true)
-
-
-
-
-endif
-
-ifeq (\$(TARGET_BOARD_HAS_TFA_AMP),true)
+ifeq (\$(LOCAL_USE_TFA_AMP),true)
 include \$(CLEAR_VARS)
 LOCAL_MODULE := libtfa98xx
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libtfa98xx.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libtfa98xx.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -458,8 +638,8 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libvndsecril-client
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_64 := proprietary/vendor/lib64/libvndsecril-client.so
-LOCAL_SRC_FILES_32 := proprietary/vendor/lib/libvndsecril-client.so
+LOCAL_SRC_FILES_64 := sec_radio/proprietary/vendor/lib64/libvndsecril-client.so
+LOCAL_SRC_FILES_32 := sec_radio/proprietary/vendor/lib/libvndsecril-client.so
 LOCAL_MULTILIB := both
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
@@ -468,12 +648,12 @@ LOCAL_SHARED_LIBRARIES := liblog libcutils libhardware_legacy libfloatingfeature
 include \$(BUILD_PREBUILT)
 endif
 
-
+ifeq (\$(LOCAL_EXYNOS7870_AUDIO_GUARD),true)
 include \$(CLEAR_VARS)
 LOCAL_MODULE := libaudior7870
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libaudior7870.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libaudior7870.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -486,7 +666,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libLifevibes_lvverx
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libLifevibes_lvverx.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libLifevibes_lvverx.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -505,7 +685,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libLifevibes_lvvetx
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libLifevibes_lvvetx.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libLifevibes_lvvetx.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -524,7 +704,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libpreprocessing_nxp
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libpreprocessing_nxp.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libpreprocessing_nxp.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -537,15 +717,15 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := librecordalive
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/librecordalive.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/librecordalive.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-ifeq (\$(TARGET_BOARD_HAS_A6LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_BOARD_HAS_SEC_AUDIO_HAL),true)
 LOCAL_SHARED_LIBRARIES := liblog libutils libcutils lib_SamsungRec_06004 libsecaudioinfo libc++ libc libm libdl
 endif
-ifeq (\$(TARGET_BOARD_HAS_M10LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_BOARD_HAS_TFA_SEC_AUDIO_HAL),true)
 LOCAL_SHARED_LIBRARIES := liblog libutils libcutils lib_SamsungRec_06006 libsecaudioinfo libc++ libc libm libdl
 endif
 include \$(BUILD_PREBUILT)
@@ -555,7 +735,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libsamsungDiamondVoice
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libsamsungDiamondVoice.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libsamsungDiamondVoice.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -568,7 +748,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libSamsungPostProcessConvertor
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libSamsungPostProcessConvertor.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libSamsungPostProcessConvertor.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -581,15 +761,15 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := lib_SamsungRec_\$(LOCAL_SAMSUNGREC_VARIANT)
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/lib_SamsungRec_\$(LOCAL_SAMSUNGREC_VARIANT).so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/lib_SamsungRec_\$(LOCAL_SAMSUNGREC_VARIANT).so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-ifeq (\$(TARGET_BOARD_HAS_A6LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_BOARD_HAS_SEC_AUDIO_HAL),true)
 LOCAL_SHARED_LIBRARIES := libc libm libdl liblog libstdc++
 endif
-ifeq (\$(TARGET_BOARD_HAS_M10LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_BOARD_HAS_TFA_SEC_AUDIO_HAL),true)
 LOCAL_SHARED_LIBRARIES := libc libm libdl liblog
 LOCAL_ALLOW_UNDEFINED_SYMBOLS := true
 # Unresolved symbol: __aeabi_f2lz
@@ -604,7 +784,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libsecaudioinfo
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libsecaudioinfo.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libsecaudioinfo.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -617,7 +797,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := lib_soundaliveresampler
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/lib_soundaliveresampler.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/lib_soundaliveresampler.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -630,7 +810,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := lib_SoundAlive_SRC384_ver320
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/lib_SoundAlive_SRC384_ver320.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/lib_SoundAlive_SRC384_ver320.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -643,7 +823,7 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libalsa7870
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/libalsa7870.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libalsa7870.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
@@ -656,30 +836,40 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := audio.primary.exynos7870
 LOCAL_MODULE_OWNER := $VENDOR
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_32 := proprietary/\$(LOCAL_AUDIO_VARIANT_DIR)/vendor/lib/hw/audio.primary.exynos7870.so
+LOCAL_SRC_FILES_32 := \$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/hw/audio.primary.exynos7870.so
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_SUFFIX := .so
 LOCAL_MULTILIB := 32
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-ifeq (\$(TARGET_BOARD_HAS_A6LTE_AUDIO_HAL),true)
-LOCAL_SHARED_LIBRARIES := libSamsungPostProcessConvertor libaudio-ril libaudior7870 libaudioutils libc++ libc libcutils libdl libfloatingfeature liblog libm libpreprocessing_nxp librecordalive libsamsungDiamondVoice libsecaudioinfo libalsa7870 libtinycompress libutils libvndsecril-client
+ifeq (\$(TARGET_BOARD_HAS_SEC_AUDIO_HAL),true)
+LOCAL_SHARED_LIBRARIES := libSamsungPostProcessConvertor libaudio-ril libaudior7870 libaudioroute_sec_helper libaudioutils libc++ libc libcutils libdl libfloatingfeature liblog libm libpreprocessing_nxp librecordalive libsamsungDiamondVoice libsecaudioinfo libalsa7870 libtinycompress libutils libvndsecril-client
 endif
-ifeq (\$(TARGET_BOARD_HAS_M10LTE_AUDIO_HAL),true)
-LOCAL_SHARED_LIBRARIES := libSamsungPostProcessConvertor libaudio-ril libaudior7870 libaudioutils libc++ libc libcutils libdl libfloatingfeature liblog libm libpreprocessing_nxp librecordalive libsamsungDiamondVoice libsecaudioinfo libalsa7870 libtinycompress libutils libvndsecril-client libtfa98xx
+ifeq (\$(TARGET_BOARD_HAS_TFA_SEC_AUDIO_HAL),true)
+LOCAL_SHARED_LIBRARIES := libSamsungPostProcessConvertor libalsa7870 libaudio-ril libaudior7870 libaudioroute_sec_helper libaudioutils libc++ libc libcutils libdl libfloatingfeature liblog libm libpreprocessing_nxp librecordalive libsamsungDiamondVoice libsecaudioinfo libtfa98xx libtinycompress libutils libvndsecril-client
 endif
 include \$(BUILD_PREBUILT)
+endif
+endif
 
 EOF
 
-(cat << EOF) >> $ANDROID_ROOT/$OUTDIR/$DEVICE_COMMON-vendor.mk
+(cat << EOF) >> "${VENDOR_MK_ROOT}/$DEVICE_COMMON-vendor.mk"
 
 # Create Mali links for Vulkan and OpenCL
 PRODUCT_PACKAGES += \\
     libGLES_mali
 
 # common audio
-ifeq (\$(TARGET_DEVICE_HAS_PREBUILT_AUDIO_HAL),true)
+ifeq (\$(TARGET_DEVICE_HAS_SEC_AUDIO_HAL),true)
+TARGET_DEVICE_COMMON_SEC_AUDIO_HAL := true
+endif
+
+ifeq (\$(TARGET_DEVICE_HAS_TFA_SEC_AUDIO_HAL),true)
+TARGET_DEVICE_COMMON_SEC_AUDIO_HAL := true
+endif
+
+ifeq (\$(TARGET_DEVICE_COMMON_SEC_AUDIO_HAL),true)
 PRODUCT_PACKAGES += \\
     libaudior7870 \\
     libLifevibes_lvverx \\
@@ -696,29 +886,43 @@ PRODUCT_PACKAGES += \\
 endif
 
 # a6lte audio
-ifeq (\$(TARGET_DEVICE_HAS_A6LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_DEVICE_HAS_SEC_AUDIO_HAL),true)
 PRODUCT_PACKAGES += \\
     lib_SamsungRec_06004
 endif
 
 # m10lte audio
-ifeq (\$(TARGET_DEVICE_HAS_M10LTE_AUDIO_HAL),true)
+ifeq (\$(TARGET_DEVICE_HAS_TFA_SEC_AUDIO_HAL),true)
 PRODUCT_PACKAGES += \\
     lib_SamsungRec_06006
 endif
 
 ifeq (\$(TARGET_DEVICE_HAS_TFA_AMP),true)
-PRODUCT_COPY_FILES += \\
-    vendor/samsung/universal7870-common/proprietary/M10LTE_AUDIO/vendor/etc/Tfa9896.cnt:\$(TARGET_COPY_OUT_VENDOR)/etc/Tfa9896.cnt
-
 PRODUCT_PACKAGES += \\
     libtfa98xx
+    
+PRODUCT_COPY_FILES += \\
+    vendor/samsung/universal7870-common/tfa_sec_audio/proprietary/vendor/etc/Tfa9896.cnt:\$(TARGET_COPY_OUT_VENDOR)/etc/Tfa9896.cnt
 endif
 
 EOF
-###################################################################################################
-# CUSTOM PART END                                                                                 #
-###################################################################################################
 
-# Finish
-write_footers
+
+# cleanup
+for key in "${!INTERNAL_DEVICE_COMMON[@]}"; do
+    COMMON_NAME="${INTERNAL_DEVICE_COMMON[$key]}"
+    VENDOR_MK_ROOT_INTERNAL_COMMON="${ANDROID_ROOT}"/vendor/"${VENDOR}"/"${COMMON_NAME}"
+
+    # patch every internal device-vendor.mk
+    echo "${VENDOR_MK_ROOT_INTERNAL_COMMON}"
+
+rm -rf "${VENDOR_MK_ROOT_INTERNAL_COMMON}"
+
+done
+
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a6lte
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a6ltep
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/m10lte
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/starlte
+rm -rf $ANDROID_ROOT/device/$VENDOR/$DEVICE_COMMON/$TOOLS_DIR/a7y17lte
+

@@ -1,4 +1,4 @@
-# Copyright (C) 2017 The LineageOS Project
+# Copyright (C) 2017-2024 The LineageOS Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_ARM_MODE := arm
-
 LOCAL_SRC_FILES := \
 	audience.c \
 	audio_hw.c \
@@ -33,19 +31,27 @@ LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	libaudioutils \
 	libhardware \
+	libprocessgroup \
 	libtinyalsa \
 	libtinycompress \
 	libaudioroute \
-	libdl \
+	libdl
+		
+ifeq ($(BOARD_USE_VNDSECRIL), true)
+# newer properitary version with extra oem functions oss impl lacks
+LOCAL_SHARED_LIBRARIES += \
 	libvndsecril-client
-
+else
+LOCAL_SHARED_LIBRARIES += \
+	libsecril-client
+endif
 
 LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/include \
 	external/tinyalsa/include \
 	external/tinycompress/include \
 	hardware/libhardware/include \
-	$(LOCAL_PATH)/../libvndsecril-client \
+	hardware/samsung/ril/libsecril-client \
 	$(call include-path-for, audio-utils) \
 	$(call include-path-for, audio-route) \
 	$(call include-path-for, audio-effects)
@@ -53,7 +59,12 @@ LOCAL_C_INCLUDES += \
 LOCAL_CFLAGS := -Werror -Wall
 LOCAL_CFLAGS += -DPREPROCESSING_ENABLED
 
+ifeq ($(BOARD_USE_SPKAMP), true)
+LOCAL_CFLAGS += -DSUPPORT_SPKAMP
+endif
+
 LOCAL_MODULE := audio.primary.$(TARGET_BOOTLOADER_BOARD_NAME)
+LOCAL_MULTILIB := 32
 LOCAL_VENDOR_MODULE := true
 LOCAL_MODULE_RELATIVE_PATH := hw
 

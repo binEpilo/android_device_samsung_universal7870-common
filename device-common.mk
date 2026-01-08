@@ -94,31 +94,62 @@ PRODUCT_PACKAGES += \
     audio.r_submix.default \
     libtinycompress
 
+
+ifeq ($(TARGET_DEVICE_HAS_TFA_SEC_AUDIO_HAL),true)
+#PRODUCT_PACKAGES += \
+#    libaudioroute_sec_helper
+else ifeq ($(TARGET_DEVICE_HAS_SEC_AUDIO_HAL),true)
+#PRODUCT_PACKAGES += \
+#    libaudioroute_sec_helper    
+else
 ifeq ($(TARGET_DEVICE_HAS_OSS_AUDIO_HAL),true)
 PRODUCT_PACKAGES += \
-    audio.primary.exynos7870_32
-
-# Audio configuration OSS
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/configs/audio/oss/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
-    $(LOCAL_PATH)/configs/audio/oss/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
-    $(LOCAL_PATH)/configs/audio/oss/mixer_gains.xml:$(TARGET_COPY_OUT_VENDOR)/etc/mixer_gains.xml
-
-else
-# Audio configuration for prebuilt samsung stock audio
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/configs/audio/prebuilt/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
-    $(LOCAL_PATH)/configs/audio/prebuilt/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml
-endif
-
+    audio.primary.exynos7870
 ifeq ($(TARGET_DEVICE_HAS_TFA_AMP),true)
 PRODUCT_PACKAGES += \
-    audio_amplifier.exynos7870_32
+    audio_amplifier.exynos7870 \
+    libtfa98xx
 endif
+endif
+endif
+
+
+# Audio configuration
+ifeq ($(TARGET_DEVICE_HAS_OSS_AUDIO_HAL),true)
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/audio/audio_policy_configuration_oss.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml
+else
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/configs/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml
+endif
+
+#ifeq ($(TARGET_DEVICE_HAS_OSS_AUDIO_HAL),true)
+#PRODUCT_PACKAGES += \
+#    audio.primary.exynos7870_32
+#
+## Audio configuration OSS
+#PRODUCT_COPY_FILES += \
+#    $(LOCAL_PATH)/configs/audio/oss/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
+#    $(LOCAL_PATH)/configs/audio/oss/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
+#    $(LOCAL_PATH)/configs/audio/oss/mixer_gains.xml:$(TARGET_COPY_OUT_VENDOR)/etc/mixer_gains.xml
+#
+#else
+## Audio configuration for prebuilt samsung stock audio
+#PRODUCT_COPY_FILES += \
+#    $(LOCAL_PATH)/configs/audio/prebuilt/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
+#    $(LOCAL_PATH)/configs/audio/prebuilt/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml
+#endif
+#
+#ifeq ($(TARGET_DEVICE_HAS_TFA_AMP),true)
+#PRODUCT_PACKAGES += \
+#    audio_amplifier.exynos7870_32
+#endif
 
 # Audio Permissions common
 PRODUCT_COPY_FILES += \
-    frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
+    $(LOCAL_PATH)/configs/audio/audio_effects.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_effects.xml \
+    frameworks/av/services/audiopolicy/config/a2dp_in_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_in_audio_policy_configuration.xml \
+    frameworks/av/services/audiopolicy/config/bluetooth_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth_audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml \
     frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
     frameworks/av/services/audiopolicy/config/bluetooth_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/bluetooth_audio_policy_configuration.xml \
@@ -132,8 +163,6 @@ PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-service \
     libion_exynos \
     libstagefright_shim \
-    libgui2vendor_shim \
-    libgui2vendor \
     camera.exynos7870 \
     libcamera_metadata_helper \
     libcsc \
@@ -142,12 +171,6 @@ PRODUCT_PACKAGES += \
     libgiantmscl \
     libGrallocWrapper \
     Camera2
-
-# explicit built targets
-PRODUCT_PACKAGES += \
-    android.hardware.graphics.mapper@2.0 \
-    android.hardware.graphics.mapper@3.0 \
-    android.hardware.graphics.mapper@4.0
 
 # Camera configurations
 PRODUCT_COPY_FILES += \
@@ -166,12 +189,16 @@ PRODUCT_PACKAGES += \
     libExynosOMX_Resourcemanager \
     libOMX.Exynos.AVC.Decoder \
     libOMX.Exynos.AVC.Encoder \
+    libOMX.Exynos.AVC.WFD.Encoder \
     libOMX.Exynos.HEVC.Decoder \
     libOMX.Exynos.HEVC.Encoder \
+    libOMX.Exynos.HEVC.WFD.Encoder \
     libOMX.Exynos.MPEG4.Decoder \
     libOMX.Exynos.MPEG4.Encoder \
     libOMX.Exynos.VP8.Decoder \
     libOMX.Exynos.VP8.Encoder \
+    libOMX.Exynos.VP9.Decoder \
+    libOMX.Exynos.VP9.Encoder \
     libOMX.Exynos.WMV.Decoder
 
 # SoundPicker
@@ -185,7 +212,6 @@ PRODUCT_PACKAGES += \
     android.hardware.graphics.composer@2.2-service  \
     android.hardware.graphics.mapper@2.0-impl-2.1 \
     android.hardware.renderscript@1.0-impl \
-    libExynosHWCService \
     gralloc.exynos7870 \
     hwcomposer.exynos7870 \
     libhwc2on1adapter \
@@ -198,6 +224,13 @@ PRODUCT_PACKAGES += \
     android.hardware.memtrack@1.0-impl \
     android.hardware.memtrack@1.0-service \
     memtrack.exynos7870
+
+# VNDK prebuilts
+PRODUCT_COPY_FILES += \
+    prebuilts/vndk/v29/arm64/arch-arm64-armv8-a/shared/vndk-core/libprotobuf-cpp-lite.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libprotobuf-cpp-lite-v29.so \
+    prebuilts/vndk/v29/arm64/arch-arm-armv8-a/shared/vndk-core/libprotobuf-cpp-lite.so:$(TARGET_COPY_OUT_VENDOR)/lib/libprotobuf-cpp-lite-v29.so \
+    prebuilts/vndk/v29/arm64/arch-arm64-armv8-a/shared/vndk-core/libprotobuf-cpp-full.so:$(TARGET_COPY_OUT_VENDOR)/lib64/libprotobuf-cpp-full-v29.so \
+    prebuilts/vndk/v29/arm64/arch-arm-armv8-a/shared/vndk-core/libprotobuf-cpp-full.so:$(TARGET_COPY_OUT_VENDOR)/lib/libprotobuf-cpp-full-v29.so
 
 # DRM
 PRODUCT_PACKAGES += \
@@ -265,6 +298,21 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/keylayout/gpio-keys.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/gpio-keys.kl \
     $(LOCAL_PATH)/configs/keylayout/sec_touchkey.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/sec_touchkey.kl \
     $(LOCAL_PATH)/configs/keylayout/sec_touchscreen.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/sec_touchscreen.kl
+
+# Keymaster
+#ifeq ($(TARGET_DEVICE_HAS_SEC_KEYMASTER),true)
+# android.hardware.keymaster@3.0-impl.exynos7870 with samsungs MDFPP keystore support
+# NOTICE: works only with trusted devices
+
+# android.hardware.keymaster@3.0-service.exynos7870 (arm only service)
+#PRODUCT_PACKAGES += \
+#    android.hardware.keymaster@3.0-impl.exynos7870 \
+#    android.hardware.keymaster@3.0-service.exynos7870
+#else
+#PRODUCT_PACKAGES += \
+#    android.hardware.keymaster@3.0-impl \
+#    android.hardware.keymaster@3.0-service
+#endif
 
 # Lights
 PRODUCT_PACKAGES += \

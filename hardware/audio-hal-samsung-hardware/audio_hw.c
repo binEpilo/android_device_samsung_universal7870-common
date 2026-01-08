@@ -2,7 +2,7 @@
  * Copyright (C) 2013 The Android Open Source Project
  * Copyright (C) 2017 Christopher N. Hesse <raymanfx@gmail.com>
  * Copyright (C) 2017 Andreas Schneider <asn@cryptomilk.org>
- * Copyright (C) 2018 The LineageOS Project
+ * Copyright (C) 2018-2023 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,120 +48,42 @@
 #include <audio_effects/effect_aec.h>
 #include <audio_effects/effect_ns.h>
 #include "audio_hw.h"
+#include "audio_hw_def.h"
 #include "compress_offload.h"
 #include "voice.h"
 
 #include "sound/compress_params.h"
 
 
-/* TODO: the following PCM device profiles could be read from a config file */
-static struct pcm_device_profile pcm_device_playback = {
-    .config = {
-        .channels = PLAYBACK_DEFAULT_CHANNEL_COUNT,
-        .rate = PLAYBACK_DEFAULT_SAMPLING_RATE,
-        .period_size = PLAYBACK_PERIOD_SIZE,
-        .period_count = PLAYBACK_PERIOD_COUNT,
-        .format = PCM_FORMAT_S16_LE,
-        .start_threshold = PLAYBACK_START_THRESHOLD(PLAYBACK_PERIOD_SIZE, PLAYBACK_PERIOD_COUNT),
-        .stop_threshold = PLAYBACK_STOP_THRESHOLD(PLAYBACK_PERIOD_SIZE, PLAYBACK_PERIOD_COUNT),
-        .silence_threshold = 0,
-        .silence_size = UINT_MAX,
-        .avail_min = PLAYBACK_AVAILABLE_MIN,
-    },
-    .card = SOUND_CARD,
-    .id = SOUND_PLAYBACK_DEVICE,
-    .type = PCM_PLAYBACK,
-    .devices = AUDIO_DEVICE_OUT_WIRED_HEADSET|AUDIO_DEVICE_OUT_WIRED_HEADPHONE|
-               AUDIO_DEVICE_OUT_SPEAKER|AUDIO_DEVICE_OUT_EARPIECE|AUDIO_DEVICE_OUT_ALL_SCO,
-};
+// Convert between TinyALSA and ALSA audio formats
+static audio_format_t audio_pcmformat_from_alsaformat(enum pcm_format pcmformat)
+{
+    audio_format_t format = AUDIO_FORMAT_PCM_16_BIT;
 
-static struct pcm_device_profile pcm_device_deep_buffer = {
-    .config = {
-        .channels = PLAYBACK_DEFAULT_CHANNEL_COUNT,
-        .rate = DEEP_BUFFER_OUTPUT_SAMPLING_RATE,
-        .period_size = DEEP_BUFFER_OUTPUT_PERIOD_SIZE,
-        .period_count = DEEP_BUFFER_OUTPUT_PERIOD_COUNT,
-        .format = PCM_FORMAT_S16_LE,
-        .start_threshold = DEEP_BUFFER_OUTPUT_PERIOD_SIZE / 4,
-        .stop_threshold = INT_MAX,
-        .avail_min = DEEP_BUFFER_OUTPUT_PERIOD_SIZE / 4,
-    },
-    .card = SOUND_CARD,
-    .id = SOUND_DEEP_BUFFER_DEVICE,
-    .type = PCM_PLAYBACK,
-    .devices = AUDIO_DEVICE_OUT_WIRED_HEADSET|AUDIO_DEVICE_OUT_WIRED_HEADPHONE|
-               AUDIO_DEVICE_OUT_SPEAKER|AUDIO_DEVICE_OUT_EARPIECE|AUDIO_DEVICE_OUT_ALL_SCO,
-};
+    switch (pcmformat) {
+        case PCM_FORMAT_S16_LE:
+            format = AUDIO_FORMAT_PCM_16_BIT;
+            break;
+        case PCM_FORMAT_S32_LE:
+            format = AUDIO_FORMAT_PCM_32_BIT;
+            break;
+        case PCM_FORMAT_S8:
+            format = AUDIO_FORMAT_PCM_8_BIT;
+            break;
+        case PCM_FORMAT_S24_LE:
+        case PCM_FORMAT_S24_3LE:
+            format = AUDIO_FORMAT_PCM_24_BIT_PACKED;
+            break;
+        case PCM_FORMAT_INVALID:
+        case PCM_FORMAT_MAX:
+            format = AUDIO_FORMAT_PCM_16_BIT;
+            break;
+    }
 
-static struct pcm_device_profile pcm_device_capture = {
-    .config = {
-        .channels = CAPTURE_DEFAULT_CHANNEL_COUNT,
-        .rate = CAPTURE_DEFAULT_SAMPLING_RATE,
-        .period_size = CAPTURE_PERIOD_SIZE,
-        .period_count = CAPTURE_PERIOD_COUNT,
-        .format = PCM_FORMAT_S16_LE,
-        .start_threshold = CAPTURE_START_THRESHOLD,
-        .stop_threshold = 0,
-        .silence_threshold = 0,
-        .avail_min = 0,
-    },
-    .card = SOUND_CARD,
-    .id = SOUND_CAPTURE_DEVICE,
-    .type = PCM_CAPTURE,
-    .devices = AUDIO_DEVICE_IN_BUILTIN_MIC|AUDIO_DEVICE_IN_WIRED_HEADSET|AUDIO_DEVICE_IN_BACK_MIC|AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
-};
+    return format;
+}
 
-static struct pcm_device_profile pcm_device_capture_low_latency = {
-    .config = {
-        .channels = CAPTURE_DEFAULT_CHANNEL_COUNT,
-        .rate = CAPTURE_DEFAULT_SAMPLING_RATE,
-        .period_size = CAPTURE_PERIOD_SIZE_LOW_LATENCY,
-        .period_count = CAPTURE_PERIOD_COUNT_LOW_LATENCY,
-        .format = PCM_FORMAT_S16_LE,
-        .start_threshold = CAPTURE_START_THRESHOLD,
-        .stop_threshold = 0,
-        .silence_threshold = 0,
-        .avail_min = 0,
-    },
-    .card = SOUND_CARD,
-    .id = SOUND_CAPTURE_DEVICE,
-    .type = PCM_CAPTURE_LOW_LATENCY,
-    .devices = AUDIO_DEVICE_IN_BUILTIN_MIC|AUDIO_DEVICE_IN_WIRED_HEADSET|AUDIO_DEVICE_IN_BACK_MIC|AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
-};
-
-static struct pcm_device_profile * const pcm_devices[] = {
-    &pcm_device_playback,
-    &pcm_device_capture,
-    &pcm_device_capture_low_latency,
-    NULL,
-};
-
-static const char * const use_case_table[AUDIO_USECASE_MAX] = {
-    [USECASE_AUDIO_PLAYBACK] = "playback",
-    [USECASE_AUDIO_PLAYBACK_MULTI_CH] = "playback multi-channel",
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD] = "compress-offload-playback",
-    [USECASE_AUDIO_PLAYBACK_DEEP_BUFFER] = "playback deep-buffer",
-    [USECASE_AUDIO_CAPTURE] = "capture",
-    [USECASE_VOICE_CALL] = "voice-call",
-};
-
-#define STRING_TO_ENUM(string) { #string, string }
-
-static unsigned int audio_device_ref_count;
-
-struct string_to_enum {
-    const char *name;
-    uint32_t value;
-};
-
-static const struct string_to_enum out_channels_name_to_enum_table[] = {
-    STRING_TO_ENUM(AUDIO_CHANNEL_OUT_STEREO),
-    STRING_TO_ENUM(AUDIO_CHANNEL_OUT_5POINT1),
-    STRING_TO_ENUM(AUDIO_CHANNEL_OUT_7POINT1),
-};
-
-static struct audio_device *adev = NULL;
-
+#ifdef SUPPORT_SPKAMP
 static amplifier_device_t * get_amplifier_device(void)
 {
     if (adev)
@@ -294,6 +216,8 @@ static int amplifier_close(void)
     return 0;
 }
 
+#endif
+
 struct timespec time_spec_diff(struct timespec time1, struct timespec time0) {
     struct timespec ret;
     int xsec = 0;
@@ -342,49 +266,6 @@ static int get_snd_codec_id(audio_format_t format)
 
     return id;
 }
-
-/* Array to store sound devices */
-static const char * const device_table[SND_DEVICE_MAX] = {
-    [SND_DEVICE_NONE] = "none",
-    /* Playback sound devices */
-    [SND_DEVICE_OUT_EARPIECE] = "earpiece",
-    [SND_DEVICE_OUT_SPEAKER] = "speaker",
-    [SND_DEVICE_OUT_HEADPHONES] = "headphones",
-    [SND_DEVICE_OUT_SPEAKER_AND_HEADPHONES] = "speaker-and-headphones",
-    [SND_DEVICE_OUT_VOICE_EARPIECE] = "voice-earpiece",
-    [SND_DEVICE_OUT_VOICE_EARPIECE_WB] = "voice-earpiece-wb",
-    [SND_DEVICE_OUT_VOICE_SPEAKER] = "voice-speaker",
-    [SND_DEVICE_OUT_VOICE_SPEAKER_WB] = "voice-speaker-wb",
-    [SND_DEVICE_OUT_VOICE_HEADPHONES] = "voice-headphones",
-    [SND_DEVICE_OUT_VOICE_HEADPHONES_WB] = "voice-headphones-wb",
-    [SND_DEVICE_OUT_VOICE_BT_SCO] = "voice-bt-sco-headset",
-    [SND_DEVICE_OUT_VOICE_BT_SCO_WB] = "voice-bt-sco-headset-wb",
-    [SND_DEVICE_OUT_HDMI] = "hdmi",
-    [SND_DEVICE_OUT_SPEAKER_AND_HDMI] = "speaker-and-hdmi",
-    [SND_DEVICE_OUT_BT_SCO] = "bt-sco-headset",
-
-    /* Capture sound devices */
-    [SND_DEVICE_IN_EARPIECE_MIC] = "earpiece-mic",
-    [SND_DEVICE_IN_SPEAKER_MIC] = "speaker-mic",
-    [SND_DEVICE_IN_HEADSET_MIC] = "headset-mic",
-    [SND_DEVICE_IN_EARPIECE_MIC_AEC] = "earpiece-mic",
-    [SND_DEVICE_IN_SPEAKER_MIC_AEC] = "voice-speaker-mic",
-    [SND_DEVICE_IN_HEADSET_MIC_AEC] = "headset-mic",
-    [SND_DEVICE_IN_VOICE_MIC] = "voice-mic",
-    [SND_DEVICE_IN_VOICE_EARPIECE_MIC] = "voice-earpiece-mic",
-    [SND_DEVICE_IN_VOICE_EARPIECE_MIC_WB] = "voice-earpiece-mic-wb",
-    [SND_DEVICE_IN_VOICE_SPEAKER_MIC] = "voice-speaker-mic",
-    [SND_DEVICE_IN_VOICE_SPEAKER_MIC_WB] = "voice-speaker-mic-wb",
-    [SND_DEVICE_IN_VOICE_HEADSET_MIC] = "voice-headset-mic",
-    [SND_DEVICE_IN_VOICE_HEADSET_MIC_WB] = "voice-headset-mic-wb",
-    [SND_DEVICE_IN_VOICE_BT_SCO_MIC] = "voice-bt-sco-mic",
-    [SND_DEVICE_IN_VOICE_BT_SCO_MIC_WB] = "voice-bt-sco-mic-wb",
-    [SND_DEVICE_IN_HDMI_MIC] = "hdmi-mic",
-    [SND_DEVICE_IN_BT_SCO_MIC] = "bt-sco-mic",
-    [SND_DEVICE_IN_CAMCORDER_MIC] = "camcorder-mic",
-    [SND_DEVICE_IN_VOICE_REC_HEADSET_MIC] = "voice-rec-headset-mic",
-    [SND_DEVICE_IN_VOICE_REC_MIC] = "voice-rec-mic",
-};
 
 static struct mixer_card *adev_get_mixer_for_card(struct audio_device *adev, int card)
 {
@@ -456,11 +337,11 @@ static int mixer_init(struct audio_device *adev)
                 }
             } while (mixer == NULL);
 
-            sprintf(mixer_path, "/vendor/etc/mixer_paths_%d.xml", card);
+            strcpy(mixer_path, "/vendor/etc/mixer_paths.xml");
             if (access(mixer_path, F_OK) == -1) {
                 ALOGW("%s: Failed to open mixer paths from %s, retrying with legacy location",
                       __func__, mixer_path);
-                sprintf(mixer_path, "/system/etc/mixer_paths_%d.xml", card);
+                strcpy(mixer_path, "/system/etc/mixer_paths.xml");
                 if (access(mixer_path, F_OK) == -1) {
                     ALOGE("%s: Failed to load a mixer paths configuration, your system will crash",
                           __func__);
@@ -881,9 +762,9 @@ static int enable_snd_device(struct audio_device *adev,
             }
         }
 #endif /* DSP_POWEROFF_DELAY */
-
+#ifdef SUPPORT_SPKAMP
         amplifier_enable_devices(snd_device, true);
-
+#endif
         audio_route_apply_and_update_path(mixer_card->audio_route, snd_device_name);
     }
 
@@ -920,7 +801,7 @@ int disable_snd_device(struct audio_device *adev,
               snd_device, snd_device_name);
         list_for_each(node, &uc_info->mixer_list) {
             mixer_card = node_to_item(node, struct mixer_card, uc_list_node[uc_info->id]);
-            audio_route_reset_and_update_path(mixer_card->audio_route, snd_device_name);
+            audio_route_force_reset_and_update_path(mixer_card->audio_route, snd_device_name);
             if (snd_device > SND_DEVICE_IN_BEGIN && out_uc_info != NULL) {
                 /*
                  * Cycle the rx device to eliminate routing conflicts.
@@ -930,8 +811,9 @@ int disable_snd_device(struct audio_device *adev,
                 out_snd_device_name = get_snd_device_name(out_uc_info->out_snd_device);
                 audio_route_apply_and_update_path(mixer_card->audio_route, out_snd_device_name);
             }
-
+#ifdef SUPPORT_SPKAMP
             amplifier_enable_devices(snd_device, false);
+#endif
 #ifdef DSP_POWEROFF_DELAY
             clock_gettime(CLOCK_MONOTONIC, &(mixer_card->dsp_poweroff_time));
 #endif /* DSP_POWEROFF_DELAY */
@@ -1108,11 +990,11 @@ static int select_devices(struct audio_device *adev,
 
     usecase->in_snd_device = in_snd_device;
     usecase->out_snd_device = out_snd_device;
-
+#ifdef SUPPORT_SPKAMP
     /* Rely on amplifier_set_devices to distinguish between in/out devices */
     amplifier_set_input_devices(in_snd_device);
     amplifier_set_output_devices(out_snd_device);
-
+#endif
     return 0;
 }
 
@@ -2592,7 +2474,9 @@ static int out_standby(struct audio_stream *stream)
     lock_output_stream(out);
     if (!out->standby) {
         pthread_mutex_lock(&adev->lock);
+#ifdef SUPPORT_SPKAMP
         amplifier_output_stream_standby((struct audio_stream_out *) stream);
+#endif
         do_out_standby_l(out);
         pthread_mutex_unlock(&adev->lock);
     }
@@ -2725,9 +2609,9 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
 #endif
         pthread_mutex_unlock(&adev->lock_inputs);
     }
-
+#ifdef SUPPORT_SPKAMP
     amplifier_set_parameters(parms);
-
+#endif
     if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
         parse_compress_metadata(out, parms);
     }
@@ -2874,10 +2758,11 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
 #endif
         pthread_mutex_lock(&adev->lock);
         ret = start_output_stream(out);
+#ifdef SUPPORT_SPKAMP
         if (ret == 0) {
             amplifier_output_stream_start(stream, out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD);
         }
-
+#endif
         /* ToDo: If use case is compress offload should return 0 */
         if (ret != 0) {
             pthread_mutex_unlock(&adev->lock);
@@ -3200,8 +3085,8 @@ static int in_close_pcm_devices(struct stream_in *in)
         if (pcm_device) {
             if (pcm_device->pcm)
                 pcm_close(pcm_device->pcm);
-            pcm_device->pcm = NULL;
-        }
+            pcm_device->pcm = NULL;           
+       }
     }
     return 0;
 }
@@ -3251,7 +3136,9 @@ static int in_standby_l(struct stream_in *in)
     lock_input_stream(in);
     if (!in->standby) {
         pthread_mutex_lock(&adev->lock);
+#ifdef SUPPORT_SPKAMP
         amplifier_input_stream_standby((struct audio_stream_in *) in);
+#endif
         status = do_in_standby_l(in);
         pthread_mutex_unlock(&adev->lock);
     }
@@ -3402,9 +3289,11 @@ static ssize_t in_read(struct audio_stream_in *stream, void *buffer,
         }
         pthread_mutex_lock(&adev->lock);
         ret = start_input_stream(in);
+#ifdef SUPPORT_SPKAMP
         if (ret == 0) {
             amplifier_input_stream_start(stream);
         }
+#endif
         pthread_mutex_unlock(&adev->lock);
         pthread_mutex_unlock(&adev->lock_inputs);
 
@@ -3638,18 +3527,22 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     ALOGV("%s: enter: sample_rate(%d) channel_mask(%#x) devices(%#x) flags(%#x)",
           __func__, config->sample_rate, config->channel_mask, devices, flags);
     *stream_out = NULL;
-    out = (struct stream_out *)calloc(1, sizeof(struct stream_out));
-    if (out == NULL) {
-        ret = -ENOMEM;
-        goto error_config;
-    }
 
+    /* Allocate memory for Structure audio_stream_out */
+    out = (struct stream_out *)calloc(1, sizeof(struct stream_out));
+    if (!out) {
+        ALOGE("device-%s: Fail to allocate memory for stream_out", __func__);
+        return -ENOMEM;
+    }
+    
     if (devices == AUDIO_DEVICE_NONE)
         devices = AUDIO_DEVICE_OUT_SPEAKER;
 
+    out->dev = adev;
+    
+    /* Save common parameters from Android Platform */
     out->flags = flags;
     out->devices = devices;
-    out->dev = adev;
     out->format = config->format;
     out->sample_rate = config->sample_rate;
     out->channel_mask = AUDIO_CHANNEL_OUT_STEREO;
@@ -3789,7 +3682,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
 error_open:
     free(out);
     *stream_out = NULL;
-error_config:
+/*error_config:*/
     ALOGV("%s: exit: ret %d", __func__, ret);
     return ret;
 }
@@ -3975,9 +3868,11 @@ static int adev_set_mode(struct audio_hw_device *dev, audio_mode_t mode)
     pthread_mutex_lock(&adev->lock);
     if (adev->mode != mode) {
         ALOGI("%s mode = %d", __func__, mode);
+#ifdef SUPPORT_SPKAMP
         if (amplifier_set_mode(mode) != 0) {
             ALOGE("Failed setting amplifier mode");
         }
+#endif
         adev->mode = mode;
 
         if ((mode == AUDIO_MODE_NORMAL) && adev->voice.in_call) {
@@ -4040,13 +3935,25 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
     struct audio_device *adev = (struct audio_device *)dev;
     struct stream_in *in;
     struct pcm_device_profile *pcm_profile;
+    #define channel_count = audio_channel_count_from_in_mask(config->channel_mask);
 
-    ALOGV("%s: enter", __func__);
+    ALOGD("device-%s: enter: io_handle (%d), sample_rate(%d) channel_mask(%#x) devices(%#x) flags(%#x) source(%d)",
+          __func__, handle, config->sample_rate, config->channel_mask, devices, flags, source);
 
     *stream_in = NULL;
     if (check_input_parameters(config->sample_rate, config->format,
-                               audio_channel_count_from_in_mask(config->channel_mask)) != 0)
-        return -EINVAL;
+                               audio_channel_count_from_in_mask(config->channel_mask)) != 0){
+
+        ALOGE("device-%s: Request has unsupported configuration!", __func__);
+
+        //config->format = pcm_device_capture.config.format;
+        config->format = audio_pcmformat_from_alsaformat(pcm_device_capture.config.format);
+        config->sample_rate = audio_pcmformat_from_alsaformat(pcm_device_capture.config.format);
+        config->channel_mask = audio_channel_in_mask_from_count(pcm_device_capture.config.channels);
+        ALOGD("device-%s: Proposed configuration!", __func__);
+    return -EINVAL;
+
+    }
 
     usecase_type_t usecase_type = flags & AUDIO_INPUT_FLAG_FAST ?
                         PCM_CAPTURE_LOW_LATENCY : PCM_CAPTURE;
@@ -4098,7 +4005,11 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
      * requested channels */
     in->config = pcm_profile->config;
 
-    /* Update config params with the requested sample rate and channels */
+    /* requested sample rate and channels */
+    ALOGV("%s: requested sample rate: %d, requested channels: %d",
+          __func__, config->sample_rate, audio_channel_count_from_in_mask(config->channel_mask));
+    ALOGV("%s: actual sample rate: %d, actual channels: %d",
+           __func__, in_get_sample_rate((const struct audio_stream *)in), in_get_channels((const struct audio_stream *)in));
     in->usecase = USECASE_AUDIO_CAPTURE;
     in->usecase_type = usecase_type;
 
@@ -4177,11 +4088,13 @@ static int adev_close(hw_device_t *device)
     struct audio_device *adev = (struct audio_device *)device;
     voice_session_deinit(adev->voice.session);
     audio_device_ref_count--;
+#ifdef SUPPORT_SPKAMP
     if (audio_device_ref_count == 0) {
         if (amplifier_close() != 0) {
             ALOGE("Amplifier close failed");
         }
     }
+#endif
     free(adev->snd_dev_ref_cnt);
     free_mixer_list(adev);
     free(device);
@@ -4290,7 +4203,7 @@ static int adev_open(const hw_module_t *module, const char *name,
                                                         "visualizer_hal_stop_output");
         }
     }
-
+    
     adev->voice.session = voice_session_init(adev);
     if (adev->voice.session == NULL) {
         ALOGE("%s: Failed to initialize voice session data", __func__);
@@ -4302,10 +4215,11 @@ static int adev_open(const hw_module_t *module, const char *name,
         return -EINVAL;
     }
 
+#ifdef SUPPORT_SPKAMP
     if (amplifier_open() != -ENOENT) {
         ALOGE("Amplifier initialization failed");
     }
-
+#endif
     *device = &adev->device.common;
 
     audio_device_ref_count++;

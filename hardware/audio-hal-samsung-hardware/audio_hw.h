@@ -22,7 +22,9 @@
 #include <cutils/list.h>
 
 #include <hardware/audio.h>
+#ifdef SUPPORT_SPKAMP
 #include <hardware/audio_amplifier.h>
+#endif
 
 #include <tinyalsa/asoundlib.h>
 #include <tinycompress/tinycompress.h>
@@ -35,9 +37,9 @@
 #define RETRY_US 500000
 
 #ifdef __LP64__
-#define OFFLOAD_FX_LIBRARY_PATH "/system/lib64/soundfx/libnvvisualizer.so"
+#define OFFLOAD_FX_LIBRARY_PATH "/vendor/lib64/soundfx/libnvvisualizer.so"
 #else
-#define OFFLOAD_FX_LIBRARY_PATH "/system/lib/soundfx/libnvvisualizer.so"
+#define OFFLOAD_FX_LIBRARY_PATH "/vendor/lib/soundfx/libnvvisualizer.so"
 #endif
 
 #ifdef PREPROCESSING_ENABLED
@@ -409,7 +411,9 @@ struct audio_device {
 #endif
 
     pthread_mutex_t         lock_inputs; /* see note below on mutex acquisition order */
+#ifdef SUPPORT_SPKAMP
     amplifier_device_t      *amp;
+#endif
 };
 
 /*
