@@ -255,19 +255,10 @@ PRODUCT_PACKAGES += \
     FlipFlap
 
 # Gatekeeper
-ifeq ($(TARGET_DEVICE_HAS_HW_GATEKEEPER_BIOMETRICS),true)
 PRODUCT_PACKAGES += \
     android.hardware.gatekeeper@1.0-impl:32 \
-    android.hardware.gatekeeper@1.0-service.exynos7870
-    
-else ifeq ($(TARGET_DEVICE_HAS_HW_GATEKEEPER_COMMON),true)
-PRODUCT_PACKAGES += \
-    android.hardware.gatekeeper@1.0-impl:32 \
-    android.hardware.gatekeeper@1.0-service.exynos7870
-else
-PRODUCT_PACKAGES += \
-    android.hardware.gatekeeper@1.0-service.software
-endif
+    android.hardware.gatekeeper@1.0-service.exynos7870 \
+    gatekeeper.exynos7870
 
 # Healthd
 PRODUCT_PACKAGES += \
