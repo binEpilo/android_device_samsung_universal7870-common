@@ -172,6 +172,12 @@ PRODUCT_PACKAGES += \
     libGrallocWrapper \
     Camera2
 
+# MobiCore setup
+PRODUCT_PACKAGES += \
+	libMcClient \
+	libMcRegistry \
+	mcDriverDaemon
+
 # Camera configurations
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/camera/external_camera_config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/external_camera_config.xml
