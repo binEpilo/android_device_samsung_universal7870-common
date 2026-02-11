@@ -139,7 +139,13 @@ PRODUCT_PACKAGES += \
     libgiantmscl \
     libGrallocWrapper \
     Camera2
-    
+
+# MobiCore setup
+PRODUCT_PACKAGES += \
+	libMcClient \
+	libMcRegistry \
+	mcDriverDaemon
+
 # SoundPicker
 PRODUCT_PACKAGES += \
     SoundPicker
