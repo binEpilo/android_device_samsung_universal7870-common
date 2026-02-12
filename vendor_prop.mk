@@ -85,12 +85,10 @@ PRODUCT_PROPERTY_OVERRIDES += \
 PRODUCT_PROPERTY_OVERRIDES += \
     debug.fdsan=warn_once
 
-ifeq ($(TARGET_DEVICE_HAS_MDFPP_KEYMASTER),true)
-# Keystore
+# keystore
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.hardware.keystore=mdfpp \
     ro.security.keystore.keytype=sak,gak
-endif
 
 # Wifi
 PRODUCT_PROPERTY_OVERRIDES += \
