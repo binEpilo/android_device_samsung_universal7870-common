@@ -143,6 +143,9 @@ TARGET_POWERHAL_VARIANT := samsung
 # Libhwui
 HWUI_COMPILE_FOR_PERF := true
 
+# Keymaster
+TARGET_BOARD_HAS_MDFPP_KEYMASTER_IMPL := true
+
 #Offline charge
 BOARD_CHARGING_MODE_BOOTING_LPM := "/sys/class/power_supply/battery/batt_lp_charging"
 BOARD_CHARGER_SHOW_PERCENTAGE := true
