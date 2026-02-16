@@ -86,9 +86,8 @@ PRODUCT_PROPERTY_OVERRIDES += \
     debug.fdsan=warn_once
 
 # keystore
-#PRODUCT_PROPERTY_OVERRIDES += \
-#    ro.hardware.keystore=mdfpp \
-#    ro.security.keystore.keytype=sak,gak
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.hardware.keystore=mdfpp
 
 # Wifi
 PRODUCT_PROPERTY_OVERRIDES += \
