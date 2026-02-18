@@ -190,15 +190,6 @@ vendor/etc/nxp/voiceexperience/WifiCallingHAC/Tx_ControlParams_WIDEBAND_SPEAKER.
 vendor/etc/nxp/voiceexperience/WifiCallingHAC/Tx_ControlParams_WIDEBAND_WIRED_HEADPHONE.txt
 vendor/etc/nxp/voiceexperience/WifiCallingHAC/Tx_ControlParams_WIDEBAND_WIRED_HEADSET.txt
 
-
-###FILE###:proprietary-files_m10lte_gatekeeper.txt
-# M105FDDS5CWA1
-
-# gatekeeper for devices without biometrics
--vendor/lib/hw/gatekeeper.exynos7870.so
-
-
-
 ###FILE###:proprietary-files_m10lte_radio.txt
 # M105FDDS5CWA1
 
