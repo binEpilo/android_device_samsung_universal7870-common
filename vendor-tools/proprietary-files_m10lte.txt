@@ -212,7 +212,6 @@ vendor/etc/plmn_delta_usacdma.bin
 -vendor/lib/libsensorlistener.so
 
 # camera
--vendor/lib/hw/camera.exynos7870.so:vendor/lib/hw/camera.vendor.exynos7870.so
 -vendor/lib/libstainkiller.so
 
 # Firmware
