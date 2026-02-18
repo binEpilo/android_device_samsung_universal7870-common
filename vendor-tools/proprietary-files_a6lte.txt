@@ -187,13 +187,6 @@ vendor/etc/nxp/voiceexperience/WifiCallingHAC/Tx_ControlParams_WIDEBAND_WIRED_HE
 vendor/etc/nxp/voiceexperience/WifiCallingHAC/Tx_ControlParams_WIDEBAND_WIRED_HEADSET.txt
 
 
-###FILE###:proprietary-files_a6lte_gatekeeper.txt
-# A600FJXU9CVB1
-
-# gatekeeper
--vendor/lib/hw/gatekeeper.exynos7870.so
-
-
 
 ###FILE###:proprietary-files_a6lte_gnss.txt
 # A600FJXU9CVB1
