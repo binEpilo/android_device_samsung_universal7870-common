@@ -1,6 +1,6 @@
-ifeq ($(TARGET_BOARD_HAS_MDFPP_KEYMASTER),true)
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(TARGET_BOARD_HAS_MDFPP_KEYMASTER_IMPL),true)
 include $(CLEAR_VARS)
 LOCAL_MODULE := android.hardware.keymaster@3.0-impl.exynos7870
 LOCAL_PROPRIETARY_MODULE := true
@@ -23,6 +23,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.keymaster@3.0
 
 include $(BUILD_SHARED_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE_RELATIVE_PATH := hw
@@ -44,4 +45,3 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.keymaster@3.0
 
 include $(BUILD_EXECUTABLE)
-endif
