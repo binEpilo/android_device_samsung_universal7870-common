@@ -266,7 +266,9 @@ PRODUCT_PACKAGES += \
 
 # Gatekeeper
 PRODUCT_PACKAGES += \
-    android.hardware.gatekeeper@1.0-service.software
+    android.hardware.gatekeeper@1.0-impl:32 \
+    android.hardware.gatekeeper@1.0-service.exynos7870 \
+    gatekeeper.exynos7870
 
 # Power
 PRODUCT_PACKAGES += \
