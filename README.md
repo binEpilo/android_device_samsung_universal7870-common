@@ -7,6 +7,7 @@
 - Samsung Galaxy A6 (2018)
 - Samsung Galaxy J5 (2017)
 - Samsung Galaxy J7 Core
+- Samsung Galaxy J7 (2016)
 - Samsung Galaxy J7 (2017)
 - Samsung Galaxy J7 (2018)
 - Samsung Galaxy J7 Duo (2018)
