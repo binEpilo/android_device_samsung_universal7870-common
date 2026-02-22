@@ -9,14 +9,13 @@
 - Samsung Galaxy J7 Core
 - Samsung Galaxy J7 (2016)
 - Samsung Galaxy J7 (2017)
-- Samsung Galaxy J7 (2018)
-- Samsung Galaxy J7 Duo (2018)
 - Samsung Galaxy J7 Prime
-- Samsung Galaxy J7 Prime 2
+- Samsung Galaxy J7 Prime2
 - Samsung Galaxy On7 Prime (2018)
 - Samsung Galaxy J7 Neo
 - Samsung Galaxy J7 Nxt
-- Samsung Galaxy J7 Top 
+- Samsung Galaxy J7 Top
+- Samsung Galaxy J7 Star
 - Samsung Galaxy J6 (2018)
 - Samsung Galaxy M10
 - Samsung Galaxy Wide 2
