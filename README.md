@@ -16,6 +16,7 @@
 - Samsung Galaxy On7 Prime (2018)
 - Samsung Galaxy J7 Neo
 - Samsung Galaxy J7 Nxt
+- Samsung Galaxy J7 Top 
 - Samsung Galaxy J6 (2018)
 - Samsung Galaxy M10
 - Samsung Galaxy Wide 2
