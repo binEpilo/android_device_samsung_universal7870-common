@@ -23,6 +23,7 @@
 - Samsung Galaxy Tab Active 2 (Wifi/LTE)
 - Samsung Galaxy Tab A 10.1 (2016) (Wifi/LTE/S-Pen)
 - Samsung Galaxy Tab A 7.0 (2018) (SM-T230NZ)
+- Samsung BMW ConnectedDrive (SM-T230NW)
 - Samsung Galaxy Tab Advanced
 - Samsung Galaxy Tab Advanced 2
 ```
