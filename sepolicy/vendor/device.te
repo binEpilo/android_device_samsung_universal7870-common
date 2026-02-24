@@ -25,6 +25,9 @@ type secmem_device, dev_type;
 # /dev/vfsspi
 type fingerprint_device, dev_type;
 
+# fingerprint
+type fingerprintd_vendor_data_file, data_file_type, file_type;
+
 # /dev/batch_io
 type sensor_device, dev_type;
 
