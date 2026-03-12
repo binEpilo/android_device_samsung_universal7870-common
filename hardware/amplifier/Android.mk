@@ -18,12 +18,24 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(TARGET_BOARD_TFA_MODEL),9890)
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libutils \
 	libcutils \
-        libhardware \
+    libhardware \
+	libtfa98xx \
 	libtinyalsa
+endif
+
+ifeq ($(TARGET_BOARD_TFA_MODEL),9896)
+LOCAL_SHARED_LIBRARIES := \
+	liblog \
+	libutils \
+	libcutils \
+    libhardware \
+	libtinyalsa
+endif
 
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include \
@@ -35,9 +47,22 @@ LOCAL_C_INCLUDES := \
 	$(call include-path-for, audio-route) \
 	$(call include-path-for, audio-effects)
 
-LOCAL_SRC_FILES := \
-	amplifier.c \
-	tfa.c
+
+ifeq ($(TARGET_BOARD_TFA_MODEL),9890)
+    LOCAL_SRC_FILES := \
+        tfa9890/amplifier.c \
+        tfa9890/tfa.c
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9890/include
+    LOCAL_CFLAGS += -DTFA_MODEL_9890
+endif
+
+ifeq ($(TARGET_BOARD_TFA_MODEL),9896)
+    LOCAL_SRC_FILES := \
+        tfa9896/amplifier.c \
+        tfa9896/tfa.c
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9896/include
+    LOCAL_CFLAGS += -DTFA_MODEL_9896
+endif
 
 LOCAL_CFLAGS := -Werror -Wall
 LOCAL_CFLAGS += -DPREPROCESSING_ENABLED
