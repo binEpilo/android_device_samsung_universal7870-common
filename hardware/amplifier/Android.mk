@@ -23,7 +23,7 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libutils \
 	libcutils \
-    libhardware \
+	libhardware \
 	libtfa98xx \
 	libtinyalsa
 endif
@@ -33,7 +33,7 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libutils \
 	libcutils \
-    libhardware \
+	libhardware \
 	libtinyalsa
 endif
 
@@ -42,11 +42,13 @@ LOCAL_C_INCLUDES := \
 	external/tinyalsa/include \
 	external/tinycompress/include \
 	hardware/libhardware/include \
-	hardware/samsung/audio \
 	$(call include-path-for, audio-utils) \
 	$(call include-path-for, audio-route) \
 	$(call include-path-for, audio-effects)
 
+ifeq ($(TARGET_AUDIOHAL_VARIANT),samsung-exynos7870)
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/../audio-hal-samsung-hardware
+endif
 
 ifeq ($(TARGET_BOARD_TFA_MODEL),9890)
     LOCAL_SRC_FILES := \
@@ -62,6 +64,7 @@ ifeq ($(TARGET_BOARD_TFA_MODEL),9896)
         tfa9896/tfa.c
     LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9896/include
     LOCAL_CFLAGS += -DTFA_MODEL_9896
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9896/include
 endif
 
 LOCAL_CFLAGS := -Werror -Wall
