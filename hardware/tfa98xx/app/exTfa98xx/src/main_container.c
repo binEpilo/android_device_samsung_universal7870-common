@@ -48,6 +48,36 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static int get_impedance(int dev_idx, float *imp);
 static int find_live_data_item_index(Tfa98xx_handle_t handle, const char *item_name);
 
+typedef struct {
+    // offsets known from original code
+    uint8_t  enabled;               // [0]
+    int      unknown1;               // [4]
+    uint64_t unknown2[2];             // [8]
+    int      unknown3[3];             // [24]
+    uint64_t unknown4[2];             // [36]
+    uint8_t  pad_to_96[96 - 36 - 16]; // fill up to offset 96 (adjust as needed)
+    uint8_t  byte_96;                 // [96]
+    float    impedance;               // [100]
+    int      mode;                    // [108]
+    int      volume;                  // [112]
+    int      device_index;            // [116]
+    int      flag_120;                // [120]
+    uint8_t  byte_124;                // [124]
+    // function pointers (offsets 128..151)
+    int     (*enable)(unsigned char *ctx, int on);
+    int     (*get_impedance)(unsigned char *ctx, float *imp);
+    int     (*calibrate_impedance)(unsigned char *ctx, int flag);
+    int     (*set_volume_step)(unsigned char *ctx, int left, int right);
+    int     (*set_volume_attenuation)(unsigned char *ctx, int left, int right);
+    int     (*mute)(unsigned char *ctx, int mute);
+    // our internal state – stored after the function pointers (offsets 152+)
+    int      calibrated;     // true after cold boot done
+    int      prev_mode;      // last mode used
+    int      enable_cnt;     // number of times enabled (for logging)
+    int      coldboot_cnt;   // number of cold boots performed
+    int      coldboot_flag;  // flag indicating cold boot was done
+} tfa_context_t;
+
 int load_container_file(char *fname,  nxpTfaContainer_t **buffer) {
 	int size;
 
@@ -176,155 +206,138 @@ static int find_live_data_item_index(Tfa98xx_handle_t handle, const char *item_n
  * Returns 0 on success, non-zero on error.
  *------------------------------------------------------------------------------*/
 int tfa_enable(unsigned char *ctx, int on) {
-	int ret = 0;
-	float impedance_val;
-	int mode;
-	int volume_step;
-	int some_flag;
-	int dev_idx;
-	int i;
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
+    int ret = 0;
+    float impedance_val;
+    int i;
 
-	/* Extract fields from the context structure */
-	int is_on = (ctx[0] != 0);
-	mode = *((int *)ctx + 27);          // offset 108
-	float *imp_ptr = (float *)(ctx + 100); // offset 100
-	volume_step = *((int *)ctx + 28);   // offset 112
-	dev_idx = *((int *)ctx + 29);       // offset 116
-	some_flag = *((int *)ctx + 30);     // offset 120
+    ALOGD("[NXP] %s: turning tfa %s (dev_idx=%d)\n", "tfa_enable",
+          on ? "on" : "off", tctx->device_index);
 
-	ALOGD("[NXP] %s: turning tfa %s (dev_idx=%d)\n", "tfa_enable", on ? "on" : "off", dev_idx);
+    if (on) {
+        // ----- TURN ON -----
+        if (tctx->enabled && tctx->mode == tctx->prev_mode) {
+            ALOGD("[NXP] %s: Tfa is already turned on", "tfa_enable");
+            return 0;
+        }
 
-	if (on) {
-		// ----- TURN ON -----
-		static int calibrated = 0;          // has cold boot been done?
-		static int prev_mode = -1;           // last used mode
-		static int enable_cnt = 0;
-		static int coldboot_cnt = 0;
-		static int coldboot_flag = 0;
+        tctx->enable_cnt++;
+        ALOGD("[NXP] %s: tfa_log_enable_cnt = %d\n", "tfa_enable", tctx->enable_cnt);
 
-		if (is_on && mode == prev_mode) {
-			ALOGD("[NXP] %s: Tfa is already turned on", "tfa_enable");
-			return 0;
-		}
+        if (!tctx->calibrated) {
+            // ----- COLD BOOT -----
+            tctx->coldboot_cnt++;
+            ALOGD("[NXP] %s: cold boot\n", "tfa_enable");
+            ALOGD("[NXP] %s: tfa_log_coldboot_cnt = %d\n", "tfa_enable", tctx->coldboot_cnt);
+            ALOGD("[NXP] %s: ic stable time 80 ms\n", "tfa_enable");
+            usleep(80 * 1000);
 
-		enable_cnt++;
-		ALOGD("[NXP] %s: tfa_log_enable_cnt = %d\n", "tfa_enable", enable_cnt);
+            ret = exTfa98xx_init();
+            if (ret != 0) {
+                ALOGE("[NXP] %s: calibration failed, retrying...", "tfa_enable");
+                usleep(1000);
+                usleep(1000);
+                ret = exTfa98xx_init();
+                if (ret != 0) {
+                    ALOGE("[NXP] %s: calibration failed for second time", "tfa_enable");
+                    return ret;
+                }
+            }
+            tctx->calibrated = 1;
 
-		if (!calibrated) {
-			// ----- COLD BOOT -----
-			coldboot_cnt++;
-			ALOGD("[NXP] %s: cold boot\n", "tfa_enable");
-			ALOGD("[NXP] %s: tfa_log_coldboot_cnt = %d\n", "tfa_enable", coldboot_cnt);
-			ALOGD("[NXP] %s: ic stable time 80 ms\n", "tfa_enable");
-			usleep(80 * 1000);
+            ret = exTfa98xx_speakeron(tctx->mode);
+            if (ret != 0) {
+                ALOGE("[NXP] %s: speakeron after calibration failed", "tfa_enable");
+                return ret;
+            }
 
-			// Run calibration (exTfa98xx_init loads container and calibrates)
-			ret = exTfa98xx_init();
-			if (ret != 0) {
-				ALOGE("[NXP] %s: calibration failed, retrying...", "tfa_enable");
-				usleep(1000);
-				usleep(1000);
-				ret = exTfa98xx_init();
-				if (ret != 0) {
-					ALOGE("[NXP] %s: calibration failed for second time", "tfa_enable");
-					return ret;
-				}
-			}
-			calibrated = 1;
+            if (tctx->impedance == -1.0f) {
+                if (get_impedance(tctx->device_index, &impedance_val) == 0) {
+                    tctx->impedance = impedance_val;
+                    ALOGD("[NXP] %s: impedance = %f", "tfa_enable", impedance_val);
+                } else {
+                    tctx->impedance = 0.0f;
+                    ALOGE("[NXP] %s: get impedance error ! impedance = %f", "tfa_enable", 0.0f);
+                }
+            }
 
-			// After calibration, turn on the speaker (exTfa98xx_init leaves device stopped)
-			ret = exTfa98xx_speakeron(mode);
-			if (ret != 0) {
-				ALOGE("[NXP] %s: speakeron after calibration failed", "tfa_enable");
-				return ret;
-			}
+            tctx->enabled = 1;
+            tctx->prev_mode = tctx->mode;
+            tctx->coldboot_flag = 1;
+        } else {
+            // ----- WARM BOOT -----
+            ALOGD("[NXP] %s: warm boot\n", "tfa_enable");
+            ALOGD("[NXP] %s: ic stable time 80 ms\n", "tfa_enable");
+            usleep(80 * 1000);
 
-			// If impedance not yet set, read it (using the device index from context)
-			if (*imp_ptr == -1.0f) {
-				if (get_impedance(dev_idx, &impedance_val) == 0) {
-					*imp_ptr = impedance_val;
-					ALOGD("[NXP] %s: impedance = %f", "tfa_enable", impedance_val);
-				} else {
-					*imp_ptr = 0.0f;
-					ALOGE("[NXP] %s: get impedance error ! impedance = %f", "tfa_enable", 0.0f);
-				}
-			}
+            ALOGD("[NXP] %s: Tfa mode would be switched. prev = %d, current = %d",
+                  "tfa_enable", tctx->prev_mode, tctx->mode);
 
-			ctx[0] = 1;
-			prev_mode = mode;
-			coldboot_flag = 1;
-		} else {
-			// ----- WARM BOOT -----
-			ALOGD("[NXP] %s: warm boot\n", "tfa_enable");
-			ALOGD("[NXP] %s: ic stable time 80 ms\n", "tfa_enable");
-			usleep(80 * 1000);
+            if (!tctx->coldboot_flag) {
+                tctx->coldboot_flag = 1;
+                tctx->coldboot_cnt++;
+                ALOGD("[NXP] %s: check cold startup condition\n", "tfa_enable");
+            }
 
-			ALOGD("[NXP] %s: Tfa mode would be switched. prev = %d, current = %d",
-			      "tfa_enable", prev_mode, mode);
+            ret = exTfa98xx_speakeron(tctx->mode);
+            if (ret != 0) {
+                ALOGE("[NXP] %s: speakeron failed, retrying...", "tfa_enable");
+                usleep(100 * 1000);
+                ret = exTfa98xx_speakeron(tctx->mode);
+                if (ret != 0) {
+                    ALOGE("[NXP] %s: speakeron failed for second time", "tfa_enable");
+                    return ret;
+                }
+            }
 
-			if (!coldboot_flag) {
-				coldboot_flag = 1;
-				coldboot_cnt++;
-				ALOGD("[NXP] %s: check cold startup condition\n", "tfa_enable");
-			}
+            if (tctx->impedance == -1.0f) {
+                if (get_impedance(tctx->device_index, &impedance_val) == 0) {
+                    tctx->impedance = impedance_val;
+                    ALOGD("[NXP] %s: impedance = %f", "tfa_enable", impedance_val);
+                } else {
+                    tctx->impedance = 0.0f;
+                    ALOGE("[NXP] %s: get impedance error ! impedance = %f", "tfa_enable", 0.0f);
+                }
+            }
 
-			// Turn on speaker with the requested mode
-			ret = exTfa98xx_speakeron(mode);
-			if (ret != 0) {
-				ALOGE("[NXP] %s: speakeron failed, retrying...", "tfa_enable");
-				usleep(100 * 1000);   // 100 ms
-				ret = exTfa98xx_speakeron(mode);
-				if (ret != 0) {
-					ALOGE("[NXP] %s: speakeron failed for second time", "tfa_enable");
-					return ret;
-				}
-			}
+            tctx->enabled = 1;
+            tctx->prev_mode = tctx->mode;
+        }
 
-			// If impedance not yet set, read it
-			if (*imp_ptr == -1.0f) {
-				if (get_impedance(dev_idx, &impedance_val) == 0) {
-					*imp_ptr = impedance_val;
-					ALOGD("[NXP] %s: impedance = %f", "tfa_enable", impedance_val);
-				} else {
-					*imp_ptr = 0.0f;
-					ALOGE("[NXP] %s: get impedance error ! impedance = %f", "tfa_enable", 0.0f);
-				}
-			}
+        // ----- SET VOLUME -----
+        int maxdev = tfa98xx_cnt_max_device();
+        int vsteps[MAX_DEVICES];
+        for (i = 0; i < maxdev && i < MAX_DEVICES; i++) {
+            vsteps[i] = tctx->volume;
+        }
 
-			ctx[0] = 1;
-			prev_mode = mode;
-		}
+        if (tctx->flag_120) {
+            ALOGD("[NXP] %s: tfaVolume : %d", "tfa_enable", tctx->volume);
+        } else {
+            ALOGD("[NXP] %s: tfaVolume : %d only attenuation", "tfa_enable", tctx->volume);
+        }
+        if (tfa_start(tctx->mode, vsteps) != tfa_error_ok) {
+            ALOGE("[NXP] %s: failed to set volume step", "tfa_enable");
+            // non‑fatal
+        }
 
-		// ----- SET VOLUME (common after both cold and warm boot) -----
-		int maxdev = tfa98xx_cnt_max_device();
-		int vsteps[MAX_DEVICES];
-		for (i = 0; i < maxdev && i < MAX_DEVICES; i++) {
-			vsteps[i] = volume_step;
-		}
+		// Log the maximum possible volume step for this device and mode
+		//int max_vstep = tfacont_get_max_vstep(tctx->device_index, tctx->mode);
+		//ALOGD("[NXP] %s: max volume step for device %d mode %d = %d", "tfa_enable", 
+      	//		tctx->device_index, tctx->mode, max_vstep);
+    } else {
+        // ----- TURN OFF -----
+        ALOGD("[NXP] %s: turning tfa off", "tfa_enable");
+        if (!tctx->enabled) {
+            ALOGD("[NXP] %s: Tfa is already turned off", "tfa_enable");
+            return 0;
+        }
+        tctx->enabled = 0;
+        exTfa98xx_speakeroff();
+    }
 
-		if (some_flag) {
-			ALOGD("[NXP] %s: tfaVolume : %d", "tfa_enable", volume_step);
-		} else {
-			ALOGD("[NXP] %s: tfaVolume : %d only attenuation", "tfa_enable", volume_step);
-		}
-		if (tfa_start(mode, vsteps) != tfa_error_ok) {
-			ALOGE("[NXP] %s: failed to set volume step", "tfa_enable");
-			// Non-fatal, continue
-		}
-	} else {
-		// ----- TURN OFF -----
-		ALOGD("[NXP] %s: turning tfa off", "tfa_enable");
-		if (!is_on) {
-			ALOGD("[NXP] %s: Tfa is already turned off", "tfa_enable");
-			return 0;
-		}
-		ctx[0] = 0;
-		exTfa98xx_speakeroff();
-		ret = 0;
-	}
-
-	ALOGD("[NXP] %s: end\n", "tfa_enable");
-	return ret;
+    ALOGD("[NXP] %s: end\n", "tfa_enable");
+    return ret;
 }
 
 /*------------------------------------------------------------------------------
@@ -378,23 +391,6 @@ static int get_impedance(int dev_idx, float *imp) {
 	return 0;
 }
 
-/*------------------------------------------------------------------------------
- * Context layout offsets (used by tfa_device_open and function implementations)
- *------------------------------------------------------------------------------*/
-#define CTX_ENABLED         0   // byte: 1 = on, 0 = off
-#define CTX_UNKNOWN1         4   // int
-#define CTX_UNKNOWN2         8   // 16 bytes (two qwords) – keep zero
-#define CTX_UNKNOWN3        24   // 12 bytes (three ints) – keep zero
-#define CTX_UNKNOWN4        36   // 16 bytes (two qwords) – keep zero
-#define CTX_UNKNOWN5        52   // ... (further zeros up to offset 96)
-#define CTX_BYTE_96         96   // byte (unknown)
-#define CTX_IMPEDANCE      100   // float: measured impedance
-#define CTX_MODE           108   // int: current audio mode (profile)
-#define CTX_VOLUME         112   // int: volume step
-#define CTX_DEVICE_INDEX   116   // int: device index (default 13, overwritten later)
-#define CTX_FLAG_120       120   // int: 0 = attenuation only, non-zero = volume step
-#define CTX_BYTE_124       124   // byte (unknown)
-#define CTX_FUNC_TABLE     128   // 6 function pointers (each 4 bytes on 32-bit)
 
 /*------------------------------------------------------------------------------
  * Implementations of the function pointers stored in the context.
@@ -402,90 +398,97 @@ static int get_impedance(int dev_idx, float *imp) {
  *------------------------------------------------------------------------------*/
 
 static int tfa_getImpedance_impl(unsigned char *ctx, float *imp) {
-	int dev_idx = *(int*)(ctx + CTX_DEVICE_INDEX);
-	ALOGD("tfa_getImpedance: dev_idx=%d", dev_idx);
-	return get_impedance(dev_idx, imp);
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
+    ALOGD("tfa_getImpedance: dev_idx=%d", tctx->device_index);
+    return get_impedance(tctx->device_index, imp);
 }
 
 static int tfa_calibrateImpedance_impl(unsigned char *ctx, int flag) {
-	ALOGD("tfa_calibrateImpedance: flag=%d", flag);
-	return exTfa98xx_init();
+    // tfa_context_t *tctx = (tfa_context_t*)ctx;  // not needed here
+    ALOGD("tfa_calibrateImpedance: flag=%d", flag);
+    return exTfa98xx_init();
 }
 
 static int tfa_setvolumestep_impl(unsigned char *ctx, int left, int right) {
-	int mode = *(int*)(ctx + CTX_MODE);
-	int maxdev = tfa98xx_cnt_max_device();
-	int vsteps[MAX_DEVICES];
-	int i;
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
+    int maxdev = tfa98xx_cnt_max_device();
+    int vsteps[MAX_DEVICES];
+    int i;
 
-	ALOGD("tfa_setvolumestep: mode=%d, left=%d, right=%d", mode, left, right);
-	for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-		vsteps[i] = left;
+    ALOGD("tfa_setvolumestep: mode=%d, left=%d, right=%d", tctx->mode, left, right);
+    for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
+        vsteps[i] = left;
 
-	*(int*)(ctx + CTX_VOLUME) = left;
+    tctx->volume = left;
 
-	return (tfa_start(mode, vsteps) == tfa_error_ok) ? 0 : -1;
+    return (tfa_start(tctx->mode, vsteps) == tfa_error_ok) ? 0 : -1;
 }
 
 static int tfa_setvolumeattenuation_impl(unsigned char *ctx, int left, int right) {
-	int mode = *(int*)(ctx + CTX_MODE);
-	int maxdev = tfa98xx_cnt_max_device();
-	int vsteps[MAX_DEVICES];
-	int i;
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
+    int maxdev = tfa98xx_cnt_max_device();
+    int vsteps[MAX_DEVICES];
+    int i;
 
-	ALOGD("tfa_setvolumeattenuation: mode=%d, left=%d, right=%d", mode, left, right);
-	for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-		vsteps[i] = left;
+    ALOGD("tfa_setvolumeattenuation: mode=%d, left=%d, right=%d", tctx->mode, left, right);
+    for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
+        vsteps[i] = left;
 
-	*(int*)(ctx + CTX_VOLUME) = left;
+    tctx->volume = left;
 
-	return (tfa_start(mode, vsteps) == tfa_error_ok) ? 0 : -1;
+    return (tfa_start(tctx->mode, vsteps) == tfa_error_ok) ? 0 : -1;
 }
 
 static int tfa_mute_impl(unsigned char *ctx, int mute) {
-	ALOGD("tfa_mute: mute=%d", mute);
-	if (mute) {
-		tfa_stop();
-	} else {
-		int mode = *(int*)(ctx + CTX_MODE);
-		int vol = *(int*)(ctx + CTX_VOLUME);
-		int maxdev = tfa98xx_cnt_max_device();
-		int vsteps[MAX_DEVICES];
-		int i;
-		for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-			vsteps[i] = vol;
-		tfa_start(mode, vsteps);
-	}
-	return 0;
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
+    ALOGD("tfa_mute: mute=%d", mute);
+    if (mute) {
+        tfa_stop();
+    } else {
+        int maxdev = tfa98xx_cnt_max_device();
+        int vsteps[MAX_DEVICES];
+        int i;
+        for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
+            vsteps[i] = tctx->volume;
+        tfa_start(tctx->mode, vsteps);
+    }
+    return 0;
 }
 
 /*------------------------------------------------------------------------------
  * Replacement for tfa_device_open – initializes the context structure.
  *------------------------------------------------------------------------------*/
 int tfa_device_open(unsigned char *ctx) {
-	ALOGD("[NXP] %s %s: begin", "[MAR 28, 2017]", "tfa_device_open");
+    tfa_context_t *tctx = (tfa_context_t*)ctx;
 
-	// Clear the entire context (size at least 152 bytes, we'll zero 160 for safety)
-	memset(ctx, 0, 160);
+    ALOGD("[NXP] %s %s: begin", "[MAR 28, 2017]", "tfa_device_open");
 
-	// Set default values according to original disassembly
-	*(int*)(ctx + 4) = 0;
-	*(ctx + 96) = 0;
-	*(int*)(ctx + 108) = 0;                 // default mode (Audio_Mode_Music_Normal = 0)
-	*(float*)(ctx + 100) = -1.0f;            // impedance = -1.0
-	*(ctx + 124) = 0;
-	*(int*)(ctx + 116) = 13;                 // default device index (may be overwritten later)
+    // Clear the whole context
+    memset(tctx, 0, sizeof(tfa_context_t));
 
-	// Function pointers (standard C calling convention)
-	*(void**)(ctx + 128) = (void*)tfa_enable;
-	*(void**)(ctx + 132) = (void*)tfa_getImpedance_impl;
-	*(void**)(ctx + 136) = (void*)tfa_calibrateImpedance_impl;
-	*(void**)(ctx + 140) = (void*)tfa_setvolumestep_impl;
-	*(void**)(ctx + 144) = (void*)tfa_setvolumeattenuation_impl;
-	*(void**)(ctx + 148) = (void*)tfa_mute_impl;
+    // Set default values (matching original disassembly)
+    tctx->unknown1 = 0;
+    tctx->byte_96 = 0;
+    tctx->mode = 0;                     // Audio_Mode_Music_Normal
+    tctx->impedance = -1.0f;
+    tctx->byte_124 = 0;
+    tctx->device_index = 13;             // default (may be overwritten later)
 
-	ALOGD("[NXP] %s: end", "tfa_device_open");
-	return 0;
+    // Enable full volume step mode by default
+    tctx->flag_120 = 1;
+
+    // Function pointers (standard C calling convention)
+    tctx->enable                   = tfa_enable;
+    tctx->get_impedance            = tfa_getImpedance_impl;
+    tctx->calibrate_impedance      = tfa_calibrateImpedance_impl;
+    tctx->set_volume_step          = tfa_setvolumestep_impl;
+    tctx->set_volume_attenuation   = tfa_setvolumeattenuation_impl;
+    tctx->mute                     = tfa_mute_impl;
+
+    // Our internal state starts zeroed (calibrated = 0, prev_mode = 0, etc.)
+
+    ALOGD("[NXP] %s: end", "tfa_device_open");
+    return 0;
 }
 
 /*------------------------------------------------------------------------------
