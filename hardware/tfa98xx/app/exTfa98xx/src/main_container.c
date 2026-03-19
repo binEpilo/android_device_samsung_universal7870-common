@@ -90,6 +90,23 @@ int load_container_file(char *fname,  nxpTfaContainer_t **buffer) {
 }
 
 /*------------------------------------------------------------------------------
+ * Helper: build volume steps array with per‑device clamping.
+ *------------------------------------------------------------------------------*/
+static void build_vsteps_with_clamping(int mode, int requested_step, int vsteps[MAX_DEVICES]) {
+    int maxdev = tfa98xx_cnt_max_device();
+    for (int i = 0; i < maxdev && i < MAX_DEVICES; i++) {
+        int max = tfacont_get_max_vstep(i, mode);
+        if (max <= 0) {
+            vsteps[i] = 0;
+        } else if (requested_step >= max) {
+            vsteps[i] = max - 1;          // clamp to max-1
+        } else {
+            vsteps[i] = requested_step;
+        }
+    }
+}
+
+/*------------------------------------------------------------------------------
  * Improved recordLiveData: obtains the index of the requested live data item
  * per device, then reads and prints the value for each device.
  *------------------------------------------------------------------------------*/
@@ -304,13 +321,13 @@ int tfa_enable(unsigned char *ctx, int on) {
             tctx->prev_mode = tctx->mode;
         }
 
-        // ----- SET VOLUME -----
-        int maxdev = tfa98xx_cnt_max_device();
+        // ----- SET VOLUME (with clamping) -----
         int vsteps[MAX_DEVICES];
-        for (i = 0; i < maxdev && i < MAX_DEVICES; i++) {
-            vsteps[i] = tctx->volume;
-        }
+        build_vsteps_with_clamping(tctx->mode, tctx->volume, vsteps);
 
+		for (int i = 0; i < tfa98xx_cnt_max_device(); i++) {
+    		ALOGD("[NXP] %s: device %d clamped step = %d", "tfa_enable", i, vsteps[i]);
+		}
         if (tctx->flag_120) {
             ALOGD("[NXP] %s: tfaVolume : %d", "tfa_enable", tctx->volume);
         } else {
@@ -411,29 +428,21 @@ static int tfa_calibrateImpedance_impl(unsigned char *ctx, int flag) {
 
 static int tfa_setvolumestep_impl(unsigned char *ctx, int left, int right) {
     tfa_context_t *tctx = (tfa_context_t*)ctx;
-    int maxdev = tfa98xx_cnt_max_device();
-    int vsteps[MAX_DEVICES];
-    int i;
-
     ALOGD("tfa_setvolumestep: mode=%d, left=%d, right=%d", tctx->mode, left, right);
-    for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-        vsteps[i] = left;
 
-    tctx->volume = left;
+    int vsteps[MAX_DEVICES];
+    build_vsteps_with_clamping(tctx->mode, left, vsteps);
+    tctx->volume = left;   // store requested value
 
     return (tfa_start(tctx->mode, vsteps) == tfa_error_ok) ? 0 : -1;
 }
 
 static int tfa_setvolumeattenuation_impl(unsigned char *ctx, int left, int right) {
     tfa_context_t *tctx = (tfa_context_t*)ctx;
-    int maxdev = tfa98xx_cnt_max_device();
-    int vsteps[MAX_DEVICES];
-    int i;
-
     ALOGD("tfa_setvolumeattenuation: mode=%d, left=%d, right=%d", tctx->mode, left, right);
-    for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-        vsteps[i] = left;
 
+    int vsteps[MAX_DEVICES];
+    build_vsteps_with_clamping(tctx->mode, left, vsteps);
     tctx->volume = left;
 
     return (tfa_start(tctx->mode, vsteps) == tfa_error_ok) ? 0 : -1;
@@ -445,11 +454,8 @@ static int tfa_mute_impl(unsigned char *ctx, int mute) {
     if (mute) {
         tfa_stop();
     } else {
-        int maxdev = tfa98xx_cnt_max_device();
         int vsteps[MAX_DEVICES];
-        int i;
-        for (i = 0; i < maxdev && i < MAX_DEVICES; i++)
-            vsteps[i] = tctx->volume;
+        build_vsteps_with_clamping(tctx->mode, tctx->volume, vsteps);
         tfa_start(tctx->mode, vsteps);
     }
     return 0;
