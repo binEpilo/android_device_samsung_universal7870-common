@@ -112,6 +112,10 @@
 #define AUDIO_CAPTURE_PERIOD_SIZE           960     // 960 frames, 20ms in case of 48KHz Stream
 #define AUDIO_CAPTURE_PERIOD_COUNT          2       // Total 7,680 Bytes = 960 * 2(Stereo) * 2(16bit PCM) * 2(Buffers)
 
+/* Primary input capture period size and count */
+#define PRIMARY_INPUT_PERIOD_SIZE           AUDIO_CAPTURE_PERIOD_SIZE
+#define PRIMARY_INPUT_PERIOD_COUNT          AUDIO_CAPTURE_PERIOD_COUNT
+
 #define DEFAULT_VOICE_CHANNELS              2       // Stereo
 #define NB_VOICE_SAMPLING_RATE              8000    // 8KHz
 #define WB_VOICE_SAMPLING_RATE              16000   // 16KHz
@@ -141,6 +145,11 @@
 
 #define AUDIO_CAPTURE_PERIOD_DURATION_MSEC 20//Capture audio data during 20ms periods = 960 Samples for 48KHz
 
+
+
+#define AMPSPK_SOUND_DEVICE 8 // Amplifier Speaker device
+#define AMPSPK_MIXED_REC_DEVICE 9 // Mixed recording device for Amp Speaker
+#define AMPSPK_LOOPBACK_REC_DEVICE 10 // Loopback recording device for Amp Speaker
 
 /*********************************************************************************/
 

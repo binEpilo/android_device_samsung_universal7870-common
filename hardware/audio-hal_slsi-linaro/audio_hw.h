@@ -24,8 +24,9 @@
 
 /* Definition of AudioHAL */
 #include <hardware/hardware.h>
-#include <hardware/audio.h>
+#ifdef SUPPORT_SPKAMP
 #include <hardware/audio_amplifier.h>
+#endif
 #include <hardware/audio_alsaops.h>
 
 #include <system/audio.h>
@@ -145,6 +146,7 @@ typedef enum {
     DEVICE_MAX,
     DEVICE_CNT                   = DEVICE_MAX
 } device_type_t;
+
 
 #ifdef SUPPORT_SPKAMP
 /**
@@ -397,6 +399,9 @@ struct audio_device {
         unsigned int btmic_loop_flags[BTMIC_LOOPBACK_COUNT];
     #endif
     
+    #ifdef SUPPORT_SPKAMP
+    amplifier_device_t      *amp;
+    #endif
 
 };
 

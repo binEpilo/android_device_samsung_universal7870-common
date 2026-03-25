@@ -19,10 +19,6 @@
 
 #include <system/audio.h>
 
-// vendorsupport
-
-//#define RIL_CLIENT_LIBPATH "/vendor/lib/libsecril-client.so"
-
 //vndk support
 #define RIL_CLIENT_LIBPATH "/vendor/lib/libvndsecril-client.so"
 

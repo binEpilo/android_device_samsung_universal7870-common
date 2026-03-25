@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+ifeq ($(TARGET_AUDIOHAL_VARIANT),samsung-exynos7870)
 ifeq ($(BOARD_USE_SPKAMP),true)
 
 LOCAL_PATH := $(call my-dir)
@@ -78,4 +80,5 @@ LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_SHARED_LIBRARY)
 
+endif
 endif

@@ -26,8 +26,6 @@ LOCAL_SRC_FILES := \
 	audio_hw.c \
 	sec/voice_manager.c
 
-# inline libaudioroute for vendor support
-
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/include \
 	external/tinyalsa/include \
@@ -65,6 +63,7 @@ endif
 
 LOCAL_MODULE := audio.primary.$(TARGET_BOOTLOADER_BOARD_NAME)
 LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_MULTILIB := 32
 LOCAL_VENDOR_MODULE := true
 
 LOCAL_MODULE_TAGS := optional

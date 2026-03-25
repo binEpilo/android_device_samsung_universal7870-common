@@ -30,7 +30,7 @@
 #include <cutils/properties.h>
 
 #define VOLUME_STEPS_DEFAULT  "5"
-#define VOLUME_STEPS_PROPERTY "ro.config.vc_call_vol_steps"
+#define VOLUME_STEPS_PROPERTY "ro.vendor.config.vc_call_vol_steps"
 
 bool voice_is_in_call(struct voice_manager *voice)
 {

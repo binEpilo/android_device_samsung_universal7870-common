@@ -138,16 +138,17 @@ static bool isCPCallMode(audio_usage_mode_t mode)
 
 /******************************************************************************/
 /**                                                                          **/
-/** TFA AMP                                                                  **/
+/** Amplifier Support                                                        **/
 /**                                                                          **/
 /******************************************************************************/
 
-/*static amplifier_device_t * get_amplifier_device(void)
-{
-    if (adev)
-        return adev->amp;
+#ifdef SUPPORT_SPKAMP
 
-    return NULL;
+static amplifier_device_t *get_amplifier_device(void)
+{
+    amplifier_device_t *amp = (adev && adev->amp) ? adev->amp : NULL;
+    ALOGV("%s: returning %p", __func__, amp);
+    return amp;
 }
 
 static int amplifier_open(void)
@@ -155,124 +156,198 @@ static int amplifier_open(void)
     int rc;
     amplifier_module_t *module;
 
+    ALOGD("%s: enter", __func__);
+
+    if (!adev) {
+        ALOGE("%s: adev is NULL", __func__);
+        return -ENODEV;
+    }
+
     rc = hw_get_module(AMPLIFIER_HARDWARE_MODULE_ID,
-            (const hw_module_t **) &module);
+                       (const hw_module_t **)&module);
     if (rc) {
         if (rc == -ENOENT) {
-            // no amplifier HAL present
+            ALOGD("%s: no amplifier HAL present", __func__);
             return -ENOENT;
         }
-        ALOGV("%s: Failed to obtain reference to amplifier module: %s\n",
-                __func__, strerror(-rc));
+        ALOGE("%s: Failed to obtain reference to amplifier module: %s",
+              __func__, strerror(-rc));
         return -ENODEV;
     }
 
-    rc = amplifier_device_open((const hw_module_t *) module, &adev->amp);
+    rc = amplifier_device_open((const hw_module_t *)module, &adev->amp);
     if (rc) {
-        ALOGV("%s: Failed to open amplifier hardware device: %s\n",
-                __func__, strerror(-rc));
+        ALOGE("%s: Failed to open amplifier hardware device: %s",
+              __func__, strerror(-rc));
         return -ENODEV;
     }
 
+    ALOGD("%s: Amplifier HAL opened successfully, amp=%p", __func__, adev->amp);
     return 0;
 }
 
 static int amplifier_set_input_devices(uint32_t devices)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->set_input_devices)
-        return amp->set_input_devices(amp, devices);
+    int ret = 0;
 
-    return 0;
+    ALOGD("%s: devices=0x%x, amp=%p", __func__, devices, amp);
+    if (amp && amp->set_input_devices) {
+        ret = amp->set_input_devices(amp, devices);
+        ALOGD("%s: returned %d", __func__, ret);
+    } else {
+        ALOGW("%s: amplifier not available or method missing", __func__);
+        ret = -ENOSYS;
+    }
+    return ret;
 }
 
 static int amplifier_set_output_devices(uint32_t devices)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->set_output_devices)
-        return amp->set_output_devices(amp, devices);
+    int ret = 0;
 
-    return 0;
+    ALOGD("%s: devices=0x%x, amp=%p", __func__, devices, amp);
+    if (amp && amp->set_output_devices) {
+        ret = amp->set_output_devices(amp, devices);
+        ALOGD("%s: returned %d", __func__, ret);
+    } else {
+        ALOGW("%s: amplifier not available or method missing", __func__);
+        ret = -ENOSYS;
+    }
+    return ret;
 }
 
-static int amplifier_enable_devices(uint32_t devices, bool enable)
+static int amplifier_enable_devices(device_type_t device, bool enable)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    bool is_output = devices > SND_DEVICE_OUT_BEGIN &&
-        devices < SND_DEVICE_OUT_END;
+    int ret = 0;
+    /* Determine if the device is an output (input devices >= DEVICE_MAIN_MIC) */
+    bool is_output = (device < DEVICE_MAIN_MIC && device != DEVICE_NONE);
 
-    if (amp && amp->enable_output_devices && is_output)
-        return amp->enable_output_devices(amp, devices, enable);
-
-    if (amp && amp->enable_input_devices && !is_output)
-        return amp->enable_input_devices(amp, devices, enable);
-
-    return 0;
+    ALOGV("%s: device=%s, enable=%d, is_output=%d, amp=%p",
+          __func__, device_path_table[device], enable, is_output, amp);
+    if (amp && amp->enable_output_devices && is_output) {
+        ret = amp->enable_output_devices(amp, device, enable);
+        ALOGV("%s: enable_output_devices returned %d", __func__, ret);
+    } else if (amp && amp->enable_input_devices && !is_output) {
+        ret = amp->enable_input_devices(amp, device, enable);
+        ALOGV("%s: enable_input_devices returned %d", __func__, ret);
+    } else {
+        ALOGW("%s: amplifier not available or method missing", __func__);
+        ret = -ENOSYS;
+    }
+    return ret;
 }
 
 static int amplifier_set_mode(audio_mode_t mode)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->set_mode)
-        return amp->set_mode(amp, mode);
+    int ret = 0;
 
-    return 0;
+    ALOGD("%s: mode=%d, amp=%p", __func__, mode, amp);
+    if (amp && amp->set_mode) {
+        ret = amp->set_mode(amp, mode);
+        ALOGD("%s: returned %d", __func__, ret);
+    } else {
+        ALOGW("%s: amplifier not available or method missing", __func__);
+        ret = -ENOSYS;
+    }
+    return ret;
 }
 
-static int amplifier_output_stream_start(struct audio_stream_out *stream,
-        bool offload)
+static int amplifier_output_stream_start(struct audio_stream_out *stream, bool offload)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->output_stream_start)
-        return amp->output_stream_start(amp, stream, offload);
+    int ret = 0;
 
+    ALOGV("%s: stream=%p, offload=%d, amp=%p", __func__, stream, offload, amp);
+    if (amp && amp->output_stream_start) {
+        ret = amp->output_stream_start(amp, stream, offload);
+        ALOGD("%s: returned %d", __func__, ret);
+        return ret;
+    }
     return 0;
 }
 
 static int amplifier_input_stream_start(struct audio_stream_in *stream)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->input_stream_start)
-        return amp->input_stream_start(amp, stream);
+    int ret = 0;
 
+    ALOGV("%s: stream=%p, amp=%p", __func__, stream, amp);
+    if (amp && amp->input_stream_start) {
+        ret = amp->input_stream_start(amp, stream);
+        ALOGD("%s: returned %d", __func__, ret);
+        return ret;
+    }
     return 0;
 }
 
 static int amplifier_output_stream_standby(struct audio_stream_out *stream)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->output_stream_standby)
-        return amp->output_stream_standby(amp, stream);
+    int ret = 0;
 
+    ALOGV("%s: stream=%p, amp=%p", __func__, stream, amp);
+    if (amp && amp->output_stream_standby) {
+        ret = amp->output_stream_standby(amp, stream);
+        ALOGD("%s: returned %d", __func__, ret);
+        return ret;
+    }
     return 0;
 }
 
 static int amplifier_input_stream_standby(struct audio_stream_in *stream)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->input_stream_standby)
-        return amp->input_stream_standby(amp, stream);
+    int ret = 0;
 
+    ALOGV("%s: stream=%p, amp=%p", __func__, stream, amp);
+    if (amp && amp->input_stream_standby) {
+        ret = amp->input_stream_standby(amp, stream);
+        ALOGD("%s: returned %d", __func__, ret);
+        return ret;
+    }
     return 0;
 }
 
 static int amplifier_set_parameters(struct str_parms *parms)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp && amp->set_parameters)
-        return amp->set_parameters(amp, parms);
+    int ret = 0;
 
-    return 0;
+    ALOGD("%s: parms=%p, amp=%p", __func__, parms, amp);
+    if (amp && amp->set_parameters) {
+        ret = amp->set_parameters(amp, parms);
+        ALOGD("%s: returned %d", __func__, ret);
+    } else {
+        ALOGW("%s: amplifier not available or method missing", __func__);
+        ret = -ENOSYS;
+    }
+    return ret;
 }
 
 static int amplifier_close(void)
 {
     amplifier_device_t *amp = get_amplifier_device();
-    if (amp)
-        amplifier_device_close(amp);
+    int ret = 0;
 
-    return 0;
-}*/
+    ALOGD("%s: enter, amp=%p", __func__, amp);
+    if (amp) {
+        amplifier_device_close(amp);
+        if (adev)
+            adev->amp = NULL;
+        ALOGD("%s: amplifier closed", __func__);
+        ret = 0;
+    } else {
+        ALOGW("%s: no amplifier to close", __func__);
+        ret = -ENOENT;
+    }
+    return ret;
+}
+
+#endif /* SUPPORT_SPKAMP *
 
 /******************************************************************************/
 /**                                                                          **/
@@ -667,7 +742,6 @@ static bool init_route(struct audio_device *adev)
     struct route_info *trinfo = NULL;
     struct audio_route *ar = NULL;
     const char *card_name = NULL;
-    char mixer_path[PATH_MAX];
     int i, ret_stat = 0;
 
     /* Open Mixer & Initialize Route Path */
@@ -676,27 +750,12 @@ static bool init_route(struct audio_device *adev)
         /* We are using only one Sound Card */
         adev->mixerinfo = mixer_open(SOUND_CARD0);
         if (adev->mixerinfo) {
-            // Construct the path for the mixer_paths configuration file
-            sprintf(mixer_path, "/vendor/etc/mixer_paths_%d.xml", SOUND_CARD0);
-            // Check if the mixer_paths file exists at specified path
-            if (access(mixer_path, F_OK) == -1) {
-                // If the file does not exist, log a warning and try the legacy location
-                ALOGW("device-%s: Failed to open mixer paths from %s, retrying with legacy location", __func__, mixer_path);
-                sprintf(mixer_path, "/system/etc/mixer_paths_%d.xml", SOUND_CARD0);
-                if (access(mixer_path, F_OK) == -1) {
-                    // If the file does not exist at the legacy location either, log an error and abort
-                    ALOGE("device-%s: Failed to load a mixer paths configuration, aborting.", __func__);
-                    mixer_close(adev->mixerinfo);
-                    adev->mixerinfo = NULL;
-                    free(trinfo);
-                    return false;
-                }
-            }
-            // Initialize the audio route with the found or fallback mixer_paths configuration file
-            ar = audio_route_init(SOUND_CARD0, mixer_path);
+            // Load mixer paths
+            ar = audio_route_init(SOUND_CARD0, VENDOR_MIXER_XML_PATH);
             if (!ar) {
                 /* Fail to open Mixer or init route */
-                ALOGE("device-%s: Failed to init audio route with Mixer(%d)!", __func__, SOUND_CARD0);
+                ALOGE("device-%s: Failed to init audio route with Mixer(%d) from vendor (%s)!",
+                      __func__, SOUND_CARD0, VENDOR_MIXER_XML_PATH);
                 mixer_close(adev->mixerinfo);
                 adev->mixerinfo = NULL;
                 free(trinfo);
@@ -743,74 +802,74 @@ static void deinit_route(struct audio_device *adev)
 }
 
 #ifdef SUPPORT_SPKAMP
-static int do_open_spkamp_stream(
-        struct audio_device *adev,
-        unsigned int count)
-{
-    unsigned int loop = 0;
-    int ret = 0;
-    char fn[256];
-
-    /* Open Speaker AMP loopback PCM Devices */
-    for (loop = 0; loop < count; loop++) {
-        if (!adev->spkamp_loopout_pcminfo[loop]) {
-            adev->spkamp_loopout_pcminfo[loop] = pcm_open(spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
-                                                                            adev->spkamp_flags[loop], &adev->spkamp_pcmconfig[loop]);
-            if (adev->spkamp_loopout_pcminfo[loop] && !pcm_is_ready(adev->spkamp_loopout_pcminfo[loop])) {
-                /* pcm_open does always return pcm structure, not NULL */
-                ALOGE("%s-%s: PCM Device is not ready(%s)!", "USAGE_SPKAMP",__func__, pcm_get_error(adev->spkamp_loopout_pcminfo[loop]));
-                goto err_open;
-            }
-
-            snprintf(fn, sizeof(fn), "/dev/snd/pcmC%uD%u%c", spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
-                                                adev->spkamp_flags[loop] & PCM_IN ? 'c' : 'p');
-
-            ALOGI("[%s] Opened PCM Device(%s) configured Info: Channels(%d)  Smapling Rate(%d), Format: Default(%d)", __func__, fn,
-            adev->spkamp_pcmconfig[loop].channels, adev->spkamp_pcmconfig[loop].rate, adev->spkamp_pcmconfig[loop].format);
-
-            /* Start opened PCM Device */
-            pcm_start(adev->spkamp_loopout_pcminfo[loop]);
-
-            ALOGI("[%s] PCM Device(%s) Started", __func__, fn);
-        }
-    }
-
-    return ret;
-
-err_open:
-    for (loop = 0; loop < count; loop++) {
-        if (adev->spkamp_loopout_pcminfo[loop]) {
-            pcm_stop(adev->spkamp_loopout_pcminfo[loop]);
-            pcm_close(adev->spkamp_loopout_pcminfo[loop]);
-            adev->spkamp_loopout_pcminfo[loop] = NULL;
-        }
-    }
-
-    ret = -EINVAL;
-    return ret;
-}
-
-static int do_close_spkamp_stream(
-        struct audio_device *adev,
-        unsigned int count)
-{
-    unsigned int loop = 0;
-    char fn[256];
-
-    /* Close Speaker AMP loopback PCM Devices */
-    for (loop = 0; loop < count; loop++) {
-        if (adev->spkamp_loopout_pcminfo[loop]) {
-            pcm_stop(adev->spkamp_loopout_pcminfo[loop]);
-            pcm_close(adev->spkamp_loopout_pcminfo[loop]);
-            adev->spkamp_loopout_pcminfo[loop] = NULL;
-            snprintf(fn, sizeof(fn), "/dev/snd/pcmC%uD%u%c", spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
-                                                adev->spkamp_flags[loop] & PCM_IN ? 'c' : 'p');
-            ALOGI("%s-%s: Closed PCM Device is %s", "USAGE_SPKAMP", __func__, fn);
-        }
-    }
-
-    return 0;
-}
+//static int do_open_spkamp_stream(
+//        struct audio_device *adev,
+//        unsigned int count)
+//{
+//    unsigned int loop = 0;
+//    int ret = 0;
+//    char fn[256];
+//
+//    /* Open Speaker AMP loopback PCM Devices */
+//    for (loop = 0; loop < count; loop++) {
+//        if (!adev->spkamp_loopout_pcminfo[loop]) {
+//            adev->spkamp_loopout_pcminfo[loop] = pcm_open(spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
+//                                                                            adev->spkamp_flags[loop], &adev->spkamp_pcmconfig[loop]);
+//            if (adev->spkamp_loopout_pcminfo[loop] && !pcm_is_ready(adev->spkamp_loopout_pcminfo[loop])) {
+//                /* pcm_open does always return pcm structure, not NULL */
+//                ALOGE("%s-%s: PCM Device is not ready(%s)!", "USAGE_SPKAMP",__func__, pcm_get_error(adev->spkamp_loopout_pcminfo[loop]));
+//                goto err_open;
+//            }
+//
+//            snprintf(fn, sizeof(fn), "/dev/snd/pcmC%uD%u%c", spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
+//                                                adev->spkamp_flags[loop] & PCM_IN ? 'c' : 'p');
+//
+//            ALOGI("[%s] Opened PCM Device(%s) configured Info: Channels(%d)  Smapling Rate(%d), Format: Default(%d)", __func__, fn,
+//            adev->spkamp_pcmconfig[loop].channels, adev->spkamp_pcmconfig[loop].rate, adev->spkamp_pcmconfig[loop].format);
+//
+//            /* Start opened PCM Device */
+//            pcm_start(adev->spkamp_loopout_pcminfo[loop]);
+//
+//            ALOGI("[%s] PCM Device(%s) Started", __func__, fn);
+//        }
+//    }
+//
+//    return ret;
+//
+//err_open:
+//    for (loop = 0; loop < count; loop++) {
+//        if (adev->spkamp_loopout_pcminfo[loop]) {
+//            pcm_stop(adev->spkamp_loopout_pcminfo[loop]);
+//            pcm_close(adev->spkamp_loopout_pcminfo[loop]);
+//            adev->spkamp_loopout_pcminfo[loop] = NULL;
+//        }
+//    }
+//
+//    ret = -EINVAL;
+//    return ret;
+//}
+//
+//static int do_close_spkamp_stream(
+//        struct audio_device *adev,
+//        unsigned int count)
+//{
+//    unsigned int loop = 0;
+//    char fn[256];
+//
+//    /* Close Speaker AMP loopback PCM Devices */
+//    for (loop = 0; loop < count; loop++) {
+//        if (adev->spkamp_loopout_pcminfo[loop]) {
+//            pcm_stop(adev->spkamp_loopout_pcminfo[loop]);
+//            pcm_close(adev->spkamp_loopout_pcminfo[loop]);
+//            adev->spkamp_loopout_pcminfo[loop] = NULL;
+//            snprintf(fn, sizeof(fn), "/dev/snd/pcmC%uD%u%c", spkamp_sound_device[loop][0], spkamp_sound_device[loop][1],
+//                                                adev->spkamp_flags[loop] & PCM_IN ? 'c' : 'p');
+//            ALOGI("%s-%s: Closed PCM Device is %s", "USAGE_SPKAMP", __func__, fn);
+//        }
+//    }
+//
+//    return 0;
+//}
 #endif
 
 static void make_path_name(
@@ -827,6 +886,59 @@ static void make_path_name(
     return ;
 }
 
+/* Helper to notify amplifier of device changes */
+#ifdef SUPPORT_SPKAMP
+
+static void notify_amplifier_device(device_type_t device, bool enable)
+{
+    ALOGD("%s: device=%s enable=%d", __func__, device_path_table[device], enable);
+
+    if (device == DEVICE_SPEAKER_AND_HEADSET) {
+        /* Notify amplifier for both speaker and headset */
+        amplifier_enable_devices(DEVICE_SPEAKER, enable);
+        amplifier_enable_devices(DEVICE_HEADSET, enable);
+    } else if (device == DEVICE_SPEAKER_AND_HEADPHONE) {
+        /* Notify amplifier for both speaker and headphone */
+        amplifier_enable_devices(DEVICE_SPEAKER, enable);
+        amplifier_enable_devices(DEVICE_HEADPHONE, enable);
+    } else if (device != DEVICE_NONE) {
+        /* Notify amplifier for single device */
+        ALOGV("%s: calling amplifier_enable_devices(device=%s, enable=%d)", 
+              __func__, device_path_table[device], enable);
+        amplifier_enable_devices(device, enable);
+    } else {
+        ALOGV("%s: no amplifier notification for device DEVICE_NONE", __func__);
+    }
+}
+
+static audio_devices_t get_indevice_mask_from_outdevice(device_type_t out_device)
+{
+    device_type_t in_device = get_indevice_id_from_outdevice(out_device);
+    audio_devices_t mask = AUDIO_DEVICE_NONE;
+
+    ALOGV("%s: out_device=%s -> in_device=%s", __func__, device_path_table[out_device], device_path_table[in_device]);
+
+    switch (in_device) {
+        case DEVICE_MAIN_MIC:
+            mask = AUDIO_DEVICE_IN_BUILTIN_MIC;
+            break;
+        case DEVICE_HEADSET_MIC:
+            mask = AUDIO_DEVICE_IN_WIRED_HEADSET;
+            break;
+        case DEVICE_BT_HEADSET_MIC:
+            mask = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+            break;
+        default:
+            mask = AUDIO_DEVICE_NONE;
+            break;
+    }
+
+    ALOGV("%s: mask=0x%x", __func__, mask);
+    return mask;
+}
+
+#endif /* SUPPORT_SPKAMP */
+
 static void do_set_route(
         struct audio_device *adev,
         audio_usage_id_t usage_id,
@@ -837,34 +949,37 @@ static void do_set_route(
     struct audio_route *ar = adev->rinfo->aroute;
     char path_name[MAX_PATH_NAME_LEN];
     
-    #ifdef SUPPORT_SPKAMP
-    /* Speaker AMP related loopback PCM node (for All Out devices) */
-    if (!set && (device >= DEVICE_EARPIECE && device <= DEVICE_BT_HEADSET)) {
-        /* Open/Close SPK AMP PCM node based on Enable/disable */
-        do_close_spkamp_stream(adev, SPKAMP_SPEAKER_AND_HEADSET_COUNT);
-    }
-    #endif
-
     make_path_name(path_amode, device, path_name);
-    if (set)
+    
+    if (set) {
         if (audio_route_apply_and_update_path(ar, path_name) < 0)
             ALOGE("%s-%s: Failed to enable Audio Route(%s)", usage_table[usage_id], __func__, path_name);
-        else
+        else {
             ALOGD("%s-%s: Enabled Audio Route(%s)", usage_table[usage_id], __func__, path_name);
-    else
+#ifdef SUPPORT_SPKAMP
+            /* Notify amplifier after route is applied */
+            notify_amplifier_device(device, true);
+            
+            /* Allow amplifier to stabilize before audio flows through
+               (prevents power-on click/pop artifacts on speaker) */
+            if (device == DEVICE_SPEAKER || device == DEVICE_SPEAKER_AND_HEADSET || 
+                device == DEVICE_SPEAKER_AND_HEADPHONE) {
+                usleep(5000);  /* 5ms stabilization delay */
+            }
+#endif
+        }
+    } else {
+#ifdef SUPPORT_SPKAMP
+        /* Notify amplifier before route is disabled */
+        notify_amplifier_device(device, false);
+#endif
         if (audio_route_reset_and_update_path(ar, path_name) < 0)
             ALOGE("%s-%s: Failed to disable Audio Route(%s)", usage_table[usage_id], __func__, path_name);
         else
             ALOGD("%s-%s: Disabled Audio Route(%s)", usage_table[usage_id], __func__, path_name);
-   #ifdef SUPPORT_SPKAMP
-    /* Speaker AMP related loopback PCM node (for All Out devices) */
-    if (set && (device >= DEVICE_EARPIECE && device <= DEVICE_BT_HEADSET)) {
-        /* Open/Close SPK AMP PCM node based on Enable/disable */
-        do_open_spkamp_stream(adev,SPKAMP_SPEAKER_AND_HEADSET_COUNT);
     }
-   #endif
 
-    return ;
+    return;
 }
 
 static int set_audio_route(
@@ -1080,7 +1195,6 @@ static int set_audio_route(
                     syncup_ausage_from_list(adev, ausage, ausage->usage_type, DEVICE_NONE, new_device);
                 }
             }
-
         }
     } else {
         ALOGW("%s-%s: Cannot find it from Audio Usage list!", usage_table[usage_id], __func__);
@@ -2252,6 +2366,10 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
     if (process_count == 0)
         ALOGW("%s-%s: Not Supported param!", usage_table[out->ausage], __func__);
 
+#ifdef SUPPORT_SPKAMP
+    amplifier_set_parameters(parms);
+#endif
+
     str_parms_destroy(parms);
     ALOGD("%s-%s: exit", usage_table[out->ausage], __func__);
     return 0;
@@ -2718,6 +2836,12 @@ static int in_standby(struct audio_stream *stream)
 
         /* Close device & transit to Standby */
         pthread_mutex_lock(&adev->lock);
+
+#ifdef SUPPORT_SPKAMP
+        /* Notify amplifier driver that the input stream is entering standby */
+        amplifier_input_stream_standby((struct audio_stream_in *)in);
+#endif
+
         do_close_input_stream(in);
         pthread_mutex_unlock(&adev->lock);
         in->sstate = STATE_STANDBY;
@@ -2846,6 +2970,9 @@ static ssize_t in_read(
         if (ret != 0) {
             ALOGE("%s-%s: Fail to start Output Stream!", usage_table[in->ausage], __func__);
         } else {
+#ifdef SUPPORT_SPKAMP
+            amplifier_input_stream_start(stream);
+#endif
             in->sstate = STATE_PLAYING;
             ALOGI("%s-%s: Transit to Capturing", usage_table[in->ausage], __func__);
         }
@@ -3410,6 +3537,13 @@ static int adev_set_mode(struct audio_hw_device *dev, audio_mode_t mode)
 
     pthread_mutex_lock(&adev->lock);
     if (adev->amode != mode) {
+        /* Notify speaker amplifier of mode change */
+#ifdef SUPPORT_SPKAMP
+        if (amplifier_set_mode(mode) != 0) {
+            ALOGE("Failed setting amplifier mode");
+        }
+#endif
+
         if (adev->voice) {
             if ((mode == AUDIO_MODE_NORMAL || mode == AUDIO_MODE_IN_COMMUNICATION)
                     && voice_is_in_call(adev->voice)) {
@@ -3648,17 +3782,15 @@ static int adev_dump(const audio_hw_device_t *device, int fd)
 
 static int adev_close(hw_device_t *device)
 {
-    struct audio_device *adev = (struct audio_device *)device;
-
     ALOGV("device-%s: enter", __func__);
 
     if (adev) {
         /* Clean up Platform-specific information */
         pthread_mutex_lock(&adev->lock);
-        if(adev->offload_visualizer_lib)
+        if (adev->offload_visualizer_lib)
             dlclose(adev->offload_visualizer_lib);
 
-        if(adev->rinfo)
+        if (adev->rinfo)
             deinit_route(adev);
 
         if (adev->voice) {
@@ -3669,7 +3801,19 @@ static int adev_close(hw_device_t *device)
         pthread_mutex_unlock(&adev->lock);
         pthread_mutex_destroy(&adev->lock);
 
+        /* Decrement reference count; close amplifier if this was the last instance */
+        audio_device_ref_count--;
+#ifdef SUPPORT_SPKAMP
+        if (audio_device_ref_count == 0) {
+            if (amplifier_close() != 0) {
+                ALOGE("Amplifier close failed");
+            }
+        }
+#endif
+
+        /* Finally free the device structure */
         free(adev);
+        adev = NULL;   // clear global
     }
 
     ALOGV("device-%s: Closed Audio Primary HW Device", __func__);
@@ -3702,8 +3846,6 @@ static int adev_open(
         const char* name,
         hw_device_t** device)
 {
-    struct audio_device *adev;
-
     ALOGV("device-%s: enter", __func__);
 
     /* Check Interface Name. It must be AUDIO_HARDWARE_INTERFACE */
@@ -3721,7 +3863,7 @@ static int adev_open(
 
     /* Mapping function pointers in Structure audio_hw_device as real function */
     adev->hw_device.common.tag = HARDWARE_DEVICE_TAG;
-    adev->hw_device.common.version = AUDIO_DEVICE_API_VERSION_2_0;// Now, Must be Version 2.0
+    adev->hw_device.common.version = AUDIO_DEVICE_API_VERSION_2_0;
     adev->hw_device.common.module = (struct hw_module_t *) module;
     adev->hw_device.common.close = adev_close;
 
@@ -3760,7 +3902,6 @@ static int adev_open(
         ALOGE("device-%s: Failed to init Voice Manager!", __func__);
     else {
         ALOGD("device-%s: Successed to init Voice Manager!", __func__);
-
         voice_set_callback(adev->voice, (void *)onCallbackFromRILAudio);
     }
 
@@ -3774,6 +3915,7 @@ static int adev_open(
         pthread_mutex_unlock(&adev->lock);
         pthread_mutex_destroy(&adev->lock);
         free(adev);
+        adev = NULL;          // Clear global on failure
         *device = NULL;
         return -EINVAL;
     }
@@ -3810,7 +3952,14 @@ static int adev_open(
     adev->spkamp_flags[1] = PCM_IN | PCM_MONOTONIC;
     adev->spkamp_flags[2] = PCM_IN | PCM_MONOTONIC;
 
+    /* Initialize Speaker AMP driver */
+    int ret = amplifier_open();
+    if (ret < 0 && ret != -ENOENT) {
+        ALOGE("Amplifier initialization failed");
+    }
     #endif
+
+    audio_device_ref_count++;
 
     #ifdef SUPPORT_INTERNAL_BTSCO
     /* Initialize Speaker AMP PCM configuration information */

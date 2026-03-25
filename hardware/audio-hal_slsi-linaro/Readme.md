@@ -13,13 +13,12 @@ WIP
 - voice/vioce mic partialy
 - vendorsupport
 - headphones
+- Speaker
 
 # Not Woking / TODO:
-- offload --pcm device deadlocks
-- fast audio --permissions need to be checked
-- Speaker
+- offload needs to be checked
 - bluetooth audio
-- mic recording
+- mic recording 
 - fm
 - need to check against other broken stuff
 

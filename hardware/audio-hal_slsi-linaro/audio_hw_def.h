@@ -182,6 +182,12 @@ char * device_path_table[DEVICE_CNT] = {
  **/
 #define RW_BUFFER_SIZE     1024
 
+unsigned int audio_device_ref_count;
+
+// new
+struct audio_device *adev = NULL;   // global pointer to the audio device instance
+//struct audio_device *g_adev = NULL;
+
 #ifdef SUPPORT_SPKAMP
 /**
 ** Speaker AMP fixed PCM nodes for loopback path
