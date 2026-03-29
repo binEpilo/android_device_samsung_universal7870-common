@@ -23,10 +23,16 @@ LOCAL_CFLAGS += -DSAMSUNG_NEXT_GEN_MODEM
 endif
 
 ifeq ($(TARGET_USES_VND_SECRIL), true)
+
+LOCAL_SHARED_LIBRARIES += libfloatingfeature
+
 LOCAL_CFLAGS += -DUSES_VND_SECRIL
+LOCAL_MODULE:= libvndsecril-client
+LOCAL_PROPRIETARY_MODULE := true
+else
+LOCAL_MODULE:= libsecril-client
 endif
 
-LOCAL_MODULE:= libsecril-client
 LOCAL_PRELINK_MODULE := false
 
 include $(BUILD_SHARED_LIBRARY)

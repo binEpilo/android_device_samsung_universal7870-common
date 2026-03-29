@@ -10,6 +10,7 @@
 #define __SECRIL_CLIENT_H__
 
 #include <sys/types.h>
+#include <stdint.h>
 //#include "SecProductFeature_RIL.h"
 
 #ifdef __cplusplus
@@ -76,7 +77,13 @@ int Connect_RILD(HRilClient client);
 int Connect_QRILD(HRilClient client);
 
 /**
- * Connect to RIL deamon. One client task starts.
+ * Connect to second QRIL deamon socket. One client task starts.
+ * Return is 0 or error code.
+ */
+int Connect_QRILD_Second(HRilClient client);
+
+/**
+ * Connect to RIL deamon second socket. One client task starts.
  * Return is 0 or error code.
  */
 int Connect_RILD_Second(HRilClient client);
@@ -124,6 +131,42 @@ int RegisterErrorCallback(HRilClient client, RilOnError cb, void *data);
 int InvokeOemRequestHookRaw(HRilClient client, char *data, size_t len);
 
 /**
+ * Set user-defined data associated with the client handle.
+ * Return is 0 or error code.
+ */
+int SetClientData(HRilClient client, void *data);
+
+/**
+ * Get user-defined data associated with the client handle.
+ * Return is the data pointer, or NULL on error.
+ */
+void* GetClientData(HRilClient client);
+
+/**
+ * Send a generic modem API request.
+ * Return is 0 or error code.
+ */
+int ModemAPI_Send_request(HRilClient client, int type, char *data, size_t len);
+
+/**
+ * Send an OEM IPC command with function and sub-function codes.
+ * Return is 0 or error code.
+ */
+int SendOemIpcCommand(HRilClient client, int command, int sub_command);
+
+/**
+ * Convert a modem return value to a RIL client error code.
+ * Return is RIL_CLIENT_ERR_* code.
+ */
+int ConvertReturnValue(int value);
+
+/**
+ * Callback handler for secure SIM lock unsolicited responses.
+ * Return is 0 or error code.
+ */
+int callBackSecureSimLock(HRilClient client, const void *data, size_t datalen);
+
+/**
  * Sound device types.
  */
 typedef enum _SoundType {
@@ -137,18 +180,19 @@ typedef enum _SoundType {
  * External sound device path.
  */
 typedef enum _AudioPath {
-    SOUND_AUDIO_PATH_EARPIECE,
-    SOUND_AUDIO_PATH_HANDSET = SOUND_AUDIO_PATH_EARPIECE,
-    SOUND_AUDIO_PATH_HEADSET,
-    SOUND_AUDIO_PATH_SPEAKER,
-    SOUND_AUDIO_PATH_BLUETOOTH,
-    SOUND_AUDIO_PATH_STEREO_BT,
-    SOUND_AUDIO_PATH_HEADPHONE,
-    SOUND_AUDIO_PATH_BLUETOOTH_NO_NR,
-    SOUND_AUDIO_PATH_MIC1,
-    SOUND_AUDIO_PATH_MIC2,
-    SOUND_AUDIO_PATH_BLUETOOTH_WB,
-    SOUND_AUDIO_PATH_BLUETOOTH_WB_NO_NR
+    SOUND_AUDIO_PATH_EARPIECE        = 0,
+    SOUND_AUDIO_PATH_HANDSET         = SOUND_AUDIO_PATH_EARPIECE,
+    SOUND_AUDIO_PATH_HEADSET         = 1,
+    SOUND_AUDIO_PATH_SPEAKER         = 2,
+    SOUND_AUDIO_PATH_BLUETOOTH       = 3,
+    SOUND_AUDIO_PATH_STEREO_BT       = 4,
+    SOUND_AUDIO_PATH_HEADPHONE       = 5,
+    SOUND_AUDIO_PATH_BLUETOOTH_NO_NR = 6,
+    SOUND_AUDIO_PATH_MIC1            = 7,
+    SOUND_AUDIO_PATH_MIC2            = 8,
+    SOUND_AUDIO_PATH_BLUETOOTH_WB    = 9,
+    SOUND_AUDIO_PATH_BLUETOOTH_WB_NO_NR = 10,
+    SOUND_AUDIO_PATH_HFK             = 11   /* Hands-free kit / car kit */
 } AudioPath;
 
 /**
@@ -181,12 +225,12 @@ typedef enum _CallRecCondition {
  * Mute adjustment parameters.
  */
 typedef enum _MuteCondition {
-      TX_UNMUTE, /* 0x00: TX UnMute */
-      TX_MUTE,   /* 0x01: TX Mute */
-      RX_UNMUTE, /* 0x02: RX UnMute */
-      RX_MUTE,   /* 0x03: RX Mute */
+      TX_UNMUTE,   /* 0x00: TX UnMute */
+      TX_MUTE,     /* 0x01: TX Mute */
+      RX_UNMUTE,   /* 0x02: RX UnMute */
+      RX_MUTE,     /* 0x03: RX Mute */
       RXTX_UNMUTE, /* 0x04: RXTX UnMute */
-      RXTX_MUTE,   /* 0x05: RXTX Mute */  
+      RXTX_MUTE,   /* 0x05: RXTX Mute */
 } MuteCondition;
 
 /**
@@ -289,6 +333,28 @@ int SetDhaSolution(HRilClient client, DhaSolMode mode, DhaSolSelect select, char
  */
 int SetLoopbackTest(HRilClient client, LoopbackMode mode, AudioPath path);
 
+/**
+ * Set audio mode (e.g. narrow-band, wide-band AMR).
+ * mode: audio mode type (0=normal, 1=WB-AMR, 2=WB-AMR+NS)
+ * extra_vol: extra volume flag (0=off, 1=on)
+ * Return is 0 or error code.
+ */
+int SetAudioMode(HRilClient client, int mode, int extra_vol);
+
+/**
+ * Set sound clock mode with extended mode range.
+ * mode: clock mode value (0=idle/stop, 1=ring, 2=in-call/start, ...)
+ * Return is 0 or error code.
+ */
+int SetSoundClockMode(HRilClient client, int mode);
+
+/**
+ * Setup Public Safety PDN (emergency services network).
+ * state: 0=disable, 1=enable
+ * Return is 0 or error code.
+ */
+int SetupPublicSafetyPdn(HRilClient client, int state);
+
 #ifdef __cplusplus
 };
 #endif
@@ -296,4 +362,3 @@ int SetLoopbackTest(HRilClient client, LoopbackMode mode, AudioPath path);
 #endif // __SECRIL_CLIENT_H__
 
 // end of file
-

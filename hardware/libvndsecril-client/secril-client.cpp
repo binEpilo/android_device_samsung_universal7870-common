@@ -43,6 +43,7 @@ namespace android {
 #define MULTI_CLIENT_SOCKET_NAME_2 "Multiclient2"
 #endif
 #define MULTI_CLIENT_Q_SOCKET_NAME "QMulticlient"
+#define MULTI_CLIENT_Q_SOCKET_NAME_2 "QMulticlient2"
 
 #define MAX_COMMAND_BYTES       (8 * 1024)
 #define REQ_POOL_SIZE           32
@@ -65,9 +66,14 @@ namespace android {
 #define REQ_SET_TWO_MIC_CTRL        108
 #define REQ_SET_DHA_CTRL        109
 #define REQ_SET_LOOPBACK            110
+#define REQ_SET_AUDIO_MODE          111
+#define REQ_SET_SOUND_CLK_MODE      112
+#define REQ_SEND_OEM_IPC            113
+#define REQ_SETUP_PDN               114
 
 // OEM request function ID
 #define OEM_FUNC_SOUND          0x08
+#define OEM_FUNC_NETWORK        0x0C
 
 // OEM request sub function ID
 #define OEM_SND_SET_VOLUME_CTRL     0x03
@@ -81,6 +87,9 @@ namespace android {
 #define OEM_SND_GET_MUTE        0x0C
 #define OEM_SND_SET_TWO_MIC_CTL     0x0D
 #define OEM_SND_SET_DHA_CTL     0x0E
+#define OEM_SND_SET_AUDIO_MODE  0x0F
+#define OEM_SND_SET_IPC_CMD     0x10
+#define OEM_NET_SETUP_PUBLIC_SAFETY_PDN 0x02
 
 #define OEM_SND_TYPE_VOICE          0x01 // Receiver(0x00) + Voice(0x01)
 #define OEM_SND_TYPE_SPEAKER        0x11 // SpeakerPhone(0x10) + Voice(0x01)
@@ -149,7 +158,17 @@ typedef struct _RilClientPrv {
     RilOnError      err_cb;         // error callback
     void            *err_cb_data;   // error callback data
     uint8_t b_del_handler;
+    void            *client_data;   // user-defined client data
+    pthread_mutex_t lock;           // mutex for thread safety
 } RilClientPrv;
+
+
+//---------------------------------------------------------------------------
+// Global variables (matching original binary)
+//---------------------------------------------------------------------------
+static int condition = 0;
+static int RespLen = 0;
+static uint8_t BufferTemp[MAX_COMMAND_BYTES];
 
 
 //---------------------------------------------------------------------------
@@ -340,6 +359,13 @@ HRilClient OpenClient_RILD(void) {
 
     ((RilClientPrv *)(client->prv))->parent = client;
     ((RilClientPrv *)(client->prv))->sock = -1;
+
+    // Initialize mutex
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&((RilClientPrv *)(client->prv))->lock, &attr);
+    pthread_mutexattr_destroy(&attr);
 
     return client;
 }
@@ -605,15 +631,82 @@ int Disconnect_RILD(HRilClient client) {
  */
 extern "C"
 int CloseClient_RILD(HRilClient client) {
+    RilClientPrv *client_prv;
+
     if (client == NULL || client->prv == NULL) {
         RLOGE("%s: invalid client %p", __FUNCTION__, client);
         return RIL_CLIENT_ERR_INVAL;
     }
 
+    client_prv = (RilClientPrv *)(client->prv);
+
     Disconnect_RILD(client);
 
+    pthread_mutex_destroy(&client_prv->lock);
     free(client->prv);
     free(client);
+
+    return RIL_CLIENT_ERR_SUCCESS;
+}
+
+
+/**
+ * @fn  int Connect_QRILD_Second(HRilClient client)
+ *
+ * @params  client: Client handle.
+ *
+ * @return  0, or error code.
+ */
+extern "C"
+int Connect_QRILD_Second(HRilClient client) {
+    RilClientPrv *client_prv;
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    client_prv->sock = socket_local_client(MULTI_CLIENT_Q_SOCKET_NAME_2, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM );
+
+    if (client_prv->sock < 0) {
+        RLOGE("%s: Connecting failed. %s(%d)", __FUNCTION__, strerror(errno), errno);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    client_prv->b_connect = 1;
+
+    if (fcntl(client_prv->sock, F_SETFL, O_NONBLOCK) < 0) {
+        close(client_prv->sock);
+        return RIL_CLIENT_ERR_IO;
+    }
+
+    client_prv->p_rs = record_stream_new(client_prv->sock, MAX_COMMAND_BYTES);
+
+    if (pipe(client_prv->pipefd) < 0) {
+        close(client_prv->sock);
+        RLOGE("%s: Creating command pipe failed. %s(%d)", __FUNCTION__, strerror(errno), errno);
+        return RIL_CLIENT_ERR_IO;
+    }
+
+    if (fcntl(client_prv->pipefd[0], F_SETFL, O_NONBLOCK) < 0) {
+        close(client_prv->sock);
+        close(client_prv->pipefd[0]);
+        close(client_prv->pipefd[1]);
+        return RIL_CLIENT_ERR_IO;
+    }
+
+    if (pthread_create(&(client_prv->tid_reader), NULL, RxReaderFunc, (void *)client_prv) != 0) {
+        close(client_prv->sock);
+        close(client_prv->pipefd[0]);
+        close(client_prv->pipefd[1]);
+
+        memset(client_prv, 0, sizeof(RilClientPrv));
+        client_prv->sock = -1;
+        RLOGE("%s: Can't create Reader thread. %s(%d)", __FUNCTION__, strerror(errno), errno);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
 
     return RIL_CLIENT_ERR_SUCCESS;
 }
@@ -1082,6 +1175,268 @@ int InvokeOemRequestHookRaw(HRilClient client, char *data, size_t len) {
     }
 
     return SendOemRequestHookRaw(client, REQ_OEM_HOOK_RAW, data, len);
+}
+
+
+/**
+ * Set audio mode (e.g. narrow-band, wide-band AMR).
+ */
+extern "C"
+int SetAudioMode(HRilClient client, int mode, int extra_vol) {
+    RilClientPrv *client_prv;
+    int ret;
+    char data[6] = {0,};
+
+    RLOGV(" + %s", __FUNCTION__);
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    if (client_prv->sock < 0 ) {
+        RLOGE("%s: Not connected.", __FUNCTION__);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    data[0] = OEM_FUNC_SOUND;
+    data[1] = OEM_SND_SET_AUDIO_MODE;
+    data[2] = 0x00;
+    data[3] = 0x06;
+    data[4] = mode;
+    data[5] = extra_vol;
+
+    RegisterRequestCompleteHandler(client, REQ_SET_AUDIO_MODE, NULL);
+
+    ret = SendOemRequestHookRaw(client, REQ_SET_AUDIO_MODE, data, sizeof(data));
+    if (ret != RIL_CLIENT_ERR_SUCCESS) {
+        RegisterRequestCompleteHandler(client, REQ_SET_AUDIO_MODE, NULL);
+    }
+
+    RLOGV(" - %s", __FUNCTION__);
+
+    return ret;
+}
+
+/**
+ * Set sound clock mode with extended mode range.
+ */
+extern "C"
+int SetSoundClockMode(HRilClient client, int mode) {
+    RilClientPrv *client_prv;
+    int ret;
+    char data[5] = {0,};
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    if (client_prv->sock < 0 ) {
+        RLOGE("%s: Not connected.", __FUNCTION__);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    data[0] = OEM_FUNC_SOUND;
+    data[1] = OEM_SND_SET_CLOCK_CTRL;
+    data[2] = 0x00;
+    data[3] = 0x05;
+    data[4] = mode;
+
+    RegisterRequestCompleteHandler(client, REQ_SET_SOUND_CLK_MODE, NULL);
+
+    ret = SendOemRequestHookRaw(client, REQ_SET_SOUND_CLK_MODE, data, sizeof(data));
+    if (ret != RIL_CLIENT_ERR_SUCCESS) {
+        RegisterRequestCompleteHandler(client, REQ_SET_SOUND_CLK_MODE, NULL);
+    }
+
+    return ret;
+}
+
+/**
+ * Send an OEM IPC command with function and sub-function codes.
+ */
+extern "C"
+int SendOemIpcCommand(HRilClient client, int command, int sub_command) {
+    RilClientPrv *client_prv;
+    int ret;
+    char data[4] = {0,};
+
+    RLOGV(" + %s", __FUNCTION__);
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    if (client_prv->sock < 0 ) {
+        RLOGE("%s: Not connected.", __FUNCTION__);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    data[0] = (char)command;
+    data[1] = (char)sub_command;
+    data[2] = 0x00;
+    data[3] = 0x04;
+
+    RegisterRequestCompleteHandler(client, REQ_SEND_OEM_IPC, NULL);
+
+    ret = SendOemRequestHookRaw(client, REQ_SEND_OEM_IPC, data, sizeof(data));
+    if (ret != RIL_CLIENT_ERR_SUCCESS) {
+        RegisterRequestCompleteHandler(client, REQ_SEND_OEM_IPC, NULL);
+    }
+
+    RLOGV(" - %s", __FUNCTION__);
+
+    return ret;
+}
+
+/**
+ * Send a generic modem API request.
+ */
+extern "C"
+int ModemAPI_Send_request(HRilClient client, int type, char *data, size_t len) {
+    RilClientPrv *client_prv;
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    if (client_prv->sock < 0 ) {
+        RLOGE("%s: Not connected.", __FUNCTION__);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    if (data == NULL || len == 0) {
+        RLOGE("%s: Invalid data", __FUNCTION__);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    pthread_mutex_lock(&client_prv->lock);
+    int ret = SendOemRequestHookRaw(client, type, data, len);
+    pthread_mutex_unlock(&client_prv->lock);
+
+    return ret;
+}
+
+/**
+ * Set user-defined data associated with the client handle.
+ */
+extern "C"
+int SetClientData(HRilClient client, void *data) {
+    RilClientPrv *client_prv;
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+    client_prv->client_data = data;
+
+    return RIL_CLIENT_ERR_SUCCESS;
+}
+
+/**
+ * Get user-defined data associated with the client handle.
+ */
+extern "C"
+void* GetClientData(HRilClient client) {
+    RilClientPrv *client_prv;
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return NULL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+    return client_prv->client_data;
+}
+
+/**
+ * Convert a modem return value to a RIL client error code.
+ */
+extern "C"
+int ConvertReturnValue(int value) {
+    switch (value) {
+        case 0:
+            return RIL_CLIENT_ERR_SUCCESS;
+        case 1:
+            return RIL_CLIENT_ERR_AGAIN;
+        default:
+            if (value < 0)
+                return RIL_CLIENT_ERR_UNKNOWN;
+            return RIL_CLIENT_ERR_SUCCESS;
+    }
+}
+
+/**
+ * Callback handler for secure SIM lock unsolicited responses.
+ */
+extern "C"
+int callBackSecureSimLock(HRilClient client, const void *data, size_t datalen) {
+    RLOGV(" + %s", __FUNCTION__);
+
+    if (client == NULL) {
+        RLOGE("%s: Invalid client", __FUNCTION__);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    if (data == NULL || datalen == 0) {
+        RLOGE("%s: Invalid data", __FUNCTION__);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    RLOGD("%s: Secure SIM lock callback received, data length=%zu", __FUNCTION__, datalen);
+
+    RLOGV(" - %s", __FUNCTION__);
+    return RIL_CLIENT_ERR_SUCCESS;
+}
+
+/**
+ * Setup Public Safety PDN (emergency services network).
+ */
+extern "C"
+int SetupPublicSafetyPdn(HRilClient client, int state) {
+    RilClientPrv *client_prv;
+    int ret;
+    char data[5] = {0,};
+
+    if (client == NULL || client->prv == NULL) {
+        RLOGE("%s: Invalid client %p", __FUNCTION__, client);
+        return RIL_CLIENT_ERR_INVAL;
+    }
+
+    client_prv = (RilClientPrv *)(client->prv);
+
+    if (client_prv->sock < 0 ) {
+        RLOGE("%s: Not connected.", __FUNCTION__);
+        return RIL_CLIENT_ERR_CONNECT;
+    }
+
+    data[0] = OEM_FUNC_NETWORK;
+    data[1] = OEM_NET_SETUP_PUBLIC_SAFETY_PDN;
+    data[2] = 0x00;
+    data[3] = 0x05;
+    data[4] = state;
+
+    RegisterRequestCompleteHandler(client, REQ_SETUP_PDN, NULL);
+
+    ret = SendOemRequestHookRaw(client, REQ_SETUP_PDN, data, sizeof(data));
+    if (ret != RIL_CLIENT_ERR_SUCCESS) {
+        RegisterRequestCompleteHandler(client, REQ_SETUP_PDN, NULL);
+    }
+
+    return ret;
 }
 
 
