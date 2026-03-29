@@ -161,6 +161,9 @@ BOARD_MODEM_TYPE := tss310
 BOARD_PROVIDES_LIBRIL := true
 ENABLE_VENDOR_RIL_SERVICE := true
 
+# vndsecril-client
+TARGET_USES_VND_SECRIL := true
+
 # Security Patch Level
 VENDOR_SECURITY_PATCH := 2022-02-01
 
