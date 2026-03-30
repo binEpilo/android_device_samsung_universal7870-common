@@ -112,6 +112,17 @@ struct pcm_config pcm_config_bt_sco = {
     .format = PCM_FORMAT_S16_LE,
 };
 
+struct pcm_config pcm_config_fm_radio = {
+    .channels = FM_RADIO_OUTPUT_CHANNELS,
+    .rate = FM_RADIO_OUTPUT_SAMPLING_RATE,
+    .period_size = FM_RADIO_OUTPUT_PERIOD_SIZE,
+    .period_count = FM_RADIO_OUTPUT_PERIOD_COUNT,
+    .format = PCM_FORMAT_S16_LE,
+    .start_threshold = 0,
+    .stop_threshold = 0,
+    .silence_threshold = 0,
+};
+
 /**
  ** Sound Card and Sound Device for specific Audio usage
  **/

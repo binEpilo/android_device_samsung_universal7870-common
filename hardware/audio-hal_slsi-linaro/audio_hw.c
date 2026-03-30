@@ -347,7 +347,82 @@ static int amplifier_close(void)
     return ret;
 }
 
-#endif /* SUPPORT_SPKAMP *
+#endif /* SUPPORT_SPKAMP */
+
+/******************************************************************************/
+/**                                                                          **/
+/** The Local Functions for FM Radio Support                                 **/
+/**                                                                          **/
+/******************************************************************************/
+static int fm_stop(struct audio_device *adev)
+{
+    int ret = 0;
+    struct mixer_ctl *mixer_ctl = NULL;
+
+    ALOGD("device-%s: enter", __func__);
+
+    if (!adev->pcm_fm_out) {
+        ALOGW("device-%s: FM radio is not active", __func__);
+        return 0;
+    }
+
+    /* Stop FM PCM stream */
+    if (adev->pcm_fm_out) {
+        pcm_stop(adev->pcm_fm_out);
+        pcm_close(adev->pcm_fm_out);
+        adev->pcm_fm_out = NULL;
+    }
+
+    /* Clear FM radio flag */
+    adev->fm_radio_active = false;
+
+    ALOGD("device-%s: exit", __func__);
+    return ret;
+}
+
+static int fm_start(struct audio_device *adev)
+{
+    int ret = 0;
+    struct pcm *pcm = NULL;
+    unsigned int card = FM_RADIO_SOUND_CARD;
+    unsigned int device = FM_RADIO_PLAYBACK_DEVICE;
+
+    ALOGD("device-%s: enter", __func__);
+
+    if (!adev || !adev->rinfo) {
+        ALOGE("device-%s: Invalid audio device", __func__);
+        return -EINVAL;
+    }
+
+    if (adev->pcm_fm_out) {
+        ALOGW("device-%s: FM radio is already running", __func__);
+        return 0;
+    }
+
+    /* Try to open FM radio PCM device using predefined config */
+    pcm = pcm_open(card, device, PCM_OUT, &pcm_config_fm_radio);
+    if (!pcm || !pcm_is_ready(pcm)) {
+        ALOGE("device-%s: Cannot open FM radio PCM: %s", __func__, pcm_get_error(pcm));
+        if (pcm)
+            pcm_close(pcm);
+        fm_stop(adev);
+        return -EINVAL;
+    }
+
+    /* Start PCM stream */
+    if (pcm_start(pcm) != 0) {
+        ALOGE("device-%s: Failed to start FM radio PCM: %s", __func__, pcm_get_error(pcm));
+        pcm_close(pcm);
+        fm_stop(adev);
+        return -EINVAL;
+    }
+
+    adev->pcm_fm_out = pcm;
+    adev->fm_radio_active = true;
+
+    ALOGD("device-%s: exit", __func__);
+    return ret;
+}
 
 /******************************************************************************/
 /**                                                                          **/
@@ -982,6 +1057,11 @@ static void do_set_route(
     return;
 }
 
+static inline bool is_fm_radio_active(const struct audio_device *adev)
+{
+    return adev && adev->fm_radio_active && adev->pcm_fm_out;
+}
+
 static int set_audio_route(
         void *stream,
         audio_usage_type_t usage_type,
@@ -1015,6 +1095,12 @@ static int set_audio_route(
         adev = stream_in->adev;
         handle = stream_in->handle;
     }
+
+    if (is_fm_radio_active(adev) && usage_type == AUSAGE_PLAYBACK) {
+        ALOGD("%s-%s: FM radio active, skipping route change", usage_table[usage_id], __func__);
+        return 0;
+    }
+
     ar = adev->rinfo->aroute;
 
     /* Get usage pointer from the list */
@@ -1204,6 +1290,11 @@ static int set_audio_route(
 #ifdef ROUTING_VERBOSE_LOGGING
     print_ausage(adev);
 #endif
+
+    if (is_fm_radio_active(adev)) {
+        ALOGD("%s-%s: FM radio active, force amplifier output device to speaker", usage_table[usage_id], __func__);
+        amplifier_set_output_devices(AUDIO_DEVICE_OUT_SPEAKER);
+    }
 
     return ret;
 }
@@ -2185,6 +2276,13 @@ static int out_standby(struct audio_stream *stream)
 
     pthread_mutex_lock(&out->lock);
     if (out->sstate != STATE_STANDBY) {
+        /* Skip standby if FM radio is active */
+        if (adev->fm_radio_active) {
+            ALOGI("%s-%s: skip standby mode!! in fm_radio mode", usage_table[out->ausage], __func__);
+            pthread_mutex_unlock(&out->lock);
+            return 0;
+        }
+
         /* Stop stream & transit to Idle */
         if (out->sstate != STATE_IDLE) {
             ALOGV("%s-%s: stream is running, will stop!", usage_table[out->ausage], __func__);
@@ -3405,6 +3503,30 @@ static int adev_set_parameters(
         set_audio_route((void *)adev->primary_output, AUSAGE_PLAYBACK, adev->primary_output->ausage, true);
     }
 
+    /* FM Radio */
+    ret = str_parms_get_str(parms, "fm_radio_mode", value, sizeof(value));
+    if (ret >= 0) {
+        ALOGD("device-%s: fm_radio_mode = %s", __func__, value);
+        if (!strncmp(value, "ready", 5)) {
+            /* FM radio ready state - set flag but don't start yet */
+            adev->fm_radio_active = true;
+            ALOGD("device-%s: FM radio ready", __func__);
+        } else if (!strncmp(value, "on", 2)) {
+            /* Start FM radio */
+            if (adev->fm_radio_active) {
+                ALOGD("device-%s: Starting FM radio", __func__);
+                fm_start(adev);
+            }
+        } else {
+            /* Stop FM radio on any other value */
+            if (adev->pcm_fm_out) {
+                ALOGD("device-%s: Stopping FM radio", __func__);
+                fm_stop(adev);
+            }
+        }
+        str_parms_del(parms, "fm_radio_mode");
+    }
+
     str_parms_destroy(parms);
     pthread_mutex_unlock(&adev->lock);
 
@@ -3773,10 +3895,46 @@ static void adev_close_input_stream(
 static int adev_dump(const audio_hw_device_t *device, int fd)
 {
     struct audio_device *adev = (struct audio_device *)device;
+    int mutex_locked = 0;
 
     ALOGV("device-%s: enter with file descriptor(%d)", __func__, fd);
 
-    ALOGV("device-%s: exit - This function is not implemented yet!", __func__);
+    if (!adev) {
+        ALOGD("AudioDevice HAL::dump - Error: Audio device is not initialized");
+        return 0;
+    }
+
+    ALOGD("AudioDevice HAL::dump");
+
+    if (pthread_mutex_trylock(&adev->lock) == 0) {
+        mutex_locked = 1;
+        ALOGD("1. Common part (locked)");
+    } else {
+        ALOGD("1. Common part (unlocked)");
+    }
+
+    ALOGD("Audio mode=%d usage=%d fm=%s", adev->amode, adev->usage_amode,
+         adev->fm_radio_active ? "yes" : "no");
+    ALOGD("Call active=%s screen_off=%s voice_volume=%f", adev->call_state ? "yes" : "no",
+         adev->screen_off ? "yes" : "no", adev->voice_volume);
+
+    ALOGD("BT SCO in=%p out=%p", adev->pcm_btsco_in, adev->pcm_btsco_out);
+    ALOGD("FM out=%p", adev->pcm_fm_out);
+    ALOGD("Primary output=%p devices=0x%x usage=%d state=%d",
+         adev->primary_output, adev->primary_output ? adev->primary_output->devices : 0,
+         adev->primary_output ? adev->primary_output->ausage : -1,
+         adev->primary_output ? adev->primary_output->sstate : -1);
+    ALOGD("Route card=%d", adev->rinfo ? adev->rinfo->card_num : -1);
+    ALOGD("Capture pcm=%p", adev->pcm_capture);
+
+#ifdef SUPPORT_SPKAMP
+    ALOGD("Speaker amp=%s", adev->amp ? "available" : "not available");
+#endif
+
+    if (mutex_locked)
+        pthread_mutex_unlock(&adev->lock);
+
+    ALOGV("device-%s: exit", __func__);
     return 0;
 }
 
@@ -3787,6 +3945,12 @@ static int adev_close(hw_device_t *device)
     if (adev) {
         /* Clean up Platform-specific information */
         pthread_mutex_lock(&adev->lock);
+        
+        /* Stop and close FM Radio */
+        if (adev->pcm_fm_out) {
+            fm_stop(adev);
+        }
+        
         if (adev->offload_visualizer_lib)
             dlclose(adev->offload_visualizer_lib);
 
@@ -3924,6 +4088,11 @@ static int adev_open(
 
     /* Initialize Audio Usage List */
     list_init(&adev->audio_usage_list);
+    
+    /* Initialize FM Radio */
+    adev->pcm_fm_out = NULL;
+    adev->fm_radio_active = false;
+    
     pthread_mutex_unlock(&adev->lock);
 
     /* Set Structure audio_hw_device for return */

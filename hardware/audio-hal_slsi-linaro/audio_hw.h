@@ -387,6 +387,10 @@ struct audio_device {
     struct pcm *pcm_btsco_in;      // PCM Device for bt-sco Capture
     struct pcm *pcm_btsco_out;     // PCM Device for bt-sco Playback
 
+    /* FM Radio */
+    struct pcm *pcm_fm_out;        // PCM Device for FM Radio Output
+    bool fm_radio_active;          // FM Radio mode flag
+
     /* Visualizer Library Link */
     void *offload_visualizer_lib;
     int (*notify_start_output_tovisualizer)(audio_io_handle_t);

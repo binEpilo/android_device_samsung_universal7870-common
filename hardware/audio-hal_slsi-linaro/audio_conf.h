@@ -39,6 +39,7 @@
 #define VOICE_CALL_SOUND_CARD    SOUND_CARD0
 #define AUX_DIGITAL_SOUND_CARD   SOUND_CARD0   // Not Defined
 #define BT_SCO_SOUND_CARD        SOUND_CARD0
+#define FM_RADIO_SOUND_CARD      SOUND_CARD0
 
 
 /* You have to match this number with real kernel information */
@@ -55,6 +56,7 @@
 
 #define AUX_DIGITAL_SOUND_DEVICE   0   // Not defined
 #define BT_SCO_SOUND_DEVICE        3   // Not defined
+#define FM_RADIO_SOUND_DEVICE      0   // FM Radio Device
 
 /* You have to select this number based on your AudioHAL's service */
 // Playback Devices
@@ -65,6 +67,7 @@
 #define VOICE_CALL_PLAYBACK_DEVICE    VOICE_CALL_SOUND_DEVICE
 #define AUX_DIGITAL_PLAYBACK_DEVICE   AUX_DIGITAL_SOUND_DEVICE
 #define BT_SCO_PLAYBACK_DEVICE        BT_SCO_SOUND_DEVICE
+#define FM_RADIO_PLAYBACK_DEVICE      FM_RADIO_SOUND_DEVICE
 
 
 // Capture Devices
@@ -126,6 +129,13 @@
 #define DEFAULT_BT_SCO_CHANNELS             1
 #define BT_SCO_PERIOD_SIZE                  128
 #define BT_SCO_PERIOD_COUNT                 2
+
+#define FM_RADIO_OUTPUT_CHANNELS            2       // Stereo
+#define FM_RADIO_OUTPUT_SAMPLING_RATE       48000   // 48KHz
+#define FM_RADIO_OUTPUT_PERIOD_SIZE         480     // 480 frames, 10ms in case of 48KHz Stream
+#define FM_RADIO_OUTPUT_PERIOD_COUNT        4       // Total 7,680 Bytes(40ms)
+#define FM_RADIO_OUTPUT_MAX_PERIOD_SIZE     FM_RADIO_OUTPUT_PERIOD_SIZE * FM_RADIO_OUTPUT_PERIOD_COUNT
+#define FM_RADIO_OUTPUT_STOP_THRESHOLD      INT_MAX
 
 
 /**
