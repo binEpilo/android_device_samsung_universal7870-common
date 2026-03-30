@@ -143,22 +143,33 @@ int SetClientData(HRilClient client, void *data);
 void* GetClientData(HRilClient client);
 
 /**
- * Send a generic modem API request.
- * Return is 0 or error code.
+ * Send a modem API request packet and wait for secure-SIM callback response.
+ * data: in/out buffer (request payload in, optional response data out)
+ * reserved: reserved argument for ABI compatibility
+ * payload_len: request payload length
+ * type: return-value conversion type (1..5)
+ * Return is converted modem status/result.
  */
-int ModemAPI_Send_request(HRilClient client, int type, char *data, size_t len);
+int ModemAPI_Send_request(HRilClient client, void *data, int reserved, int payload_len, int type);
 
 /**
- * Send an OEM IPC command with function and sub-function codes.
+ * Send an OEM IPC command.
+ * command/sub_command currently support command=9, sub_command=15.
+ * cmd_type: IPC command type byte.
+ * data: optional IPC payload.
+ * data_len: IPC payload length.
  * Return is 0 or error code.
  */
-int SendOemIpcCommand(HRilClient client, int command, int sub_command);
+int SendOemIpcCommand(HRilClient client, int command, int sub_command, int cmd_type, void *data, size_t data_len);
 
 /**
- * Convert a modem return value to a RIL client error code.
- * Return is RIL_CLIENT_ERR_* code.
+ * Convert modem response values to legacy client return values.
+ * modem_value: modem response value (or RespLen in legacy flow)
+ * send_result: SendOemRequestHookRaw result
+ * type: conversion type (1..5)
+ * out_copy_flag: set to 1 when caller should copy response payload
  */
-int ConvertReturnValue(int value);
+int ConvertReturnValue(int modem_value, int send_result, int type, int *out_copy_flag);
 
 /**
  * Callback handler for secure SIM lock unsolicited responses.
@@ -351,9 +362,10 @@ int SetSoundClockMode(HRilClient client, int mode);
 /**
  * Setup Public Safety PDN (emergency services network).
  * state: 0=disable, 1=enable
+ * handler: optional completion callback for request 114
  * Return is 0 or error code.
  */
-int SetupPublicSafetyPdn(HRilClient client, int state);
+int SetupPublicSafetyPdn(HRilClient client, int state, RilOnComplete handler);
 
 #ifdef __cplusplus
 };

@@ -12,6 +12,7 @@
 #include <binder/Parcel.h>
 #include <telephony/ril.h>
 #include <cutils/record_stream.h>
+#include <cutils/properties.h>
 
 #include <unistd.h>
 #include <errno.h>
@@ -66,10 +67,11 @@ namespace android {
 #define REQ_SET_TWO_MIC_CTRL        108
 #define REQ_SET_DHA_CTRL        109
 #define REQ_SET_LOOPBACK            110
-#define REQ_SET_AUDIO_MODE          111
-#define REQ_SET_SOUND_CLK_MODE      112
-#define REQ_SEND_OEM_IPC            113
+#define REQ_MODEM_API_SEND          111
+#define REQ_SET_AUDIO_MODE          112
+#define REQ_SET_SOUND_CLK_MODE      113
 #define REQ_SETUP_PDN               114
+#define REQ_SEND_OEM_IPC            115
 
 // OEM request function ID
 #define OEM_FUNC_SOUND          0x08
@@ -88,7 +90,7 @@ namespace android {
 #define OEM_SND_SET_TWO_MIC_CTL     0x0D
 #define OEM_SND_SET_DHA_CTL     0x0E
 #define OEM_SND_SET_AUDIO_MODE  0x0F
-#define OEM_SND_SET_IPC_CMD     0x10
+#define OEM_SND_SET_IPC_CMD     0x12
 #define OEM_NET_SETUP_PUBLIC_SAFETY_PDN 0x02
 
 #define OEM_SND_TYPE_VOICE          0x01 // Receiver(0x00) + Voice(0x01)
@@ -166,7 +168,7 @@ typedef struct _RilClientPrv {
 //---------------------------------------------------------------------------
 // Global variables (matching original binary)
 //---------------------------------------------------------------------------
-static int condition = 0;
+static int condition = 1;
 static int RespLen = 0;
 static uint8_t BufferTemp[MAX_COMMAND_BYTES];
 
@@ -1261,10 +1263,11 @@ int SetSoundClockMode(HRilClient client, int mode) {
  * Send an OEM IPC command with function and sub-function codes.
  */
 extern "C"
-int SendOemIpcCommand(HRilClient client, int command, int sub_command) {
+int SendOemIpcCommand(HRilClient client, int command, int sub_command, int cmd_type, void *data, size_t data_len) {
     RilClientPrv *client_prv;
     int ret;
-    char data[4] = {0,};
+    uint8_t ipc[1024] = {0,};
+    const uint16_t payload_len = (uint16_t)(data_len + 11); // header + payload
 
     RLOGV(" + %s", __FUNCTION__);
 
@@ -1275,19 +1278,41 @@ int SendOemIpcCommand(HRilClient client, int command, int sub_command) {
 
     client_prv = (RilClientPrv *)(client->prv);
 
-    if (client_prv->sock < 0 ) {
+    if (client_prv->sock < 0) {
         RLOGE("%s: Not connected.", __FUNCTION__);
         return RIL_CLIENT_ERR_CONNECT;
     }
 
-    data[0] = (char)command;
-    data[1] = (char)sub_command;
-    data[2] = 0x00;
-    data[3] = 0x04;
+    if (data_len >= 0x3F6) {
+        RLOGE("%s: Invalid ipcDataLen.", __FUNCTION__);
+        return 10;
+    }
+
+    if (!(command == 9 && sub_command == 15)) {
+        RLOGE("%s: Not supported command. mainCmd(%d) subCmd(%d)", __FUNCTION__, command, sub_command);
+        return 8;
+    }
+
+    ipc[0] = OEM_FUNC_SOUND;
+    ipc[1] = OEM_SND_SET_IPC_CMD;
+    ipc[2] = (uint8_t)(payload_len >> 8);
+    ipc[3] = (uint8_t)(payload_len & 0xFF);
+    ipc[4] = (uint8_t)(data_len + 7);
+    ipc[5] = (uint8_t)((data_len + 7) >> 8);
+    ipc[8] = (uint8_t)command;
+    ipc[9] = (uint8_t)sub_command;
+    ipc[10] = (uint8_t)cmd_type;
+
+    if (data_len > 0 && data != NULL) {
+        memcpy(&ipc[11], data, data_len);
+    }
+
+    RLOGD("%s: Send OEM IPC command : mainCmd(%d), subCmd(%d), cmdType(%d), ipcDataLen(%zu)",
+          __FUNCTION__, command, sub_command, cmd_type, data_len);
 
     RegisterRequestCompleteHandler(client, REQ_SEND_OEM_IPC, NULL);
 
-    ret = SendOemRequestHookRaw(client, REQ_SEND_OEM_IPC, data, sizeof(data));
+    ret = SendOemRequestHookRaw(client, REQ_SEND_OEM_IPC, (char *)ipc, payload_len);
     if (ret != RIL_CLIENT_ERR_SUCCESS) {
         RegisterRequestCompleteHandler(client, REQ_SEND_OEM_IPC, NULL);
     }
@@ -1301,31 +1326,82 @@ int SendOemIpcCommand(HRilClient client, int command, int sub_command) {
  * Send a generic modem API request.
  */
 extern "C"
-int ModemAPI_Send_request(HRilClient client, int type, char *data, size_t len) {
+int ModemAPI_Send_request(HRilClient client, void *data, int /*reserved*/, int payload_len, int type) {
     RilClientPrv *client_prv;
+    uint8_t request[0x1D6] = {0,};
+    char sales_code[PROPERTY_VALUE_MAX] = {0,};
+    char model[PROPERTY_VALUE_MAX] = {0,};
+    int send_ret;
+    int copy_flag = 0;
+    int final_ret = -1;
 
     if (client == NULL || client->prv == NULL) {
         RLOGE("%s: Invalid client %p", __FUNCTION__, client);
-        return RIL_CLIENT_ERR_INVAL;
+        return -1;
     }
 
     client_prv = (RilClientPrv *)(client->prv);
 
-    if (client_prv->sock < 0 ) {
+    if (client_prv->sock < 0) {
         RLOGE("%s: Not connected.", __FUNCTION__);
-        return RIL_CLIENT_ERR_CONNECT;
+        return -1;
     }
 
-    if (data == NULL || len == 0) {
-        RLOGE("%s: Invalid data", __FUNCTION__);
-        return RIL_CLIENT_ERR_INVAL;
+    if (type < 1 || type > 5) {
+        return -2;
     }
 
-    pthread_mutex_lock(&client_prv->lock);
-    int ret = SendOemRequestHookRaw(client, type, data, len);
-    pthread_mutex_unlock(&client_prv->lock);
+    property_get("ro.csc.sales_code", sales_code, "");
+    RLOGD("Salescode : %s", sales_code);
 
-    return ret;
+    if (!(!strcmp(sales_code, "ATT") || !strcmp(sales_code, "AIO") ||
+          !strcmp(sales_code, "TMB") || !strcmp(sales_code, "TMK"))) {
+        RLOGE("%s: Not Supported.", __FUNCTION__);
+        return -2;
+    }
+
+    if (!strcmp(sales_code, "ATT") || !strcmp(sales_code, "AIO")) {
+        property_get("ro.product.model", model, "");
+        if (strcmp(model, "SM-A015AZ") && strcmp(model, "SM-A015A") &&
+            strcmp(model, "SM-A102U") && strcmp(model, "SM-A115AZ") &&
+            strcmp(model, "SM-A115AP")) {
+            RLOGE("%s: Not Supported.", __FUNCTION__);
+            return -2;
+        }
+    }
+
+    if (payload_len >= 466) {
+        RLOGE("%s: Invalid payload_length.", __FUNCTION__);
+        return -1;
+    }
+
+    request[0] = 0x11;
+    request[1] = 0x63;
+    request[2] = (uint8_t)((payload_len + 5) >> 8);
+    request[3] = (uint8_t)((payload_len + 5) & 0xFF);
+    request[4] = (uint8_t)type;
+    if (payload_len > 0 && data != NULL) {
+        memcpy(&request[5], data, payload_len);
+    }
+
+    RegisterRequestCompleteHandler(client, REQ_MODEM_API_SEND, callBackSecureSimLock);
+    send_ret = SendOemRequestHookRaw(client, REQ_MODEM_API_SEND, (char *)request, (size_t)(payload_len + 5));
+    if (send_ret != RIL_CLIENT_ERR_SUCCESS) {
+        RegisterRequestCompleteHandler(client, REQ_MODEM_API_SEND, callBackSecureSimLock);
+    }
+
+    while (condition) {
+        usleep(0x7A120);
+    }
+    condition = 1;
+
+    final_ret = ConvertReturnValue(RespLen, send_ret, type, &copy_flag);
+    if (copy_flag && data != NULL && final_ret > 0) {
+        memcpy(data, BufferTemp, (size_t)final_ret);
+    }
+
+    RLOGD("%s: return value %d", __FUNCTION__, final_ret);
+    return final_ret;
 }
 
 /**
@@ -1343,7 +1419,7 @@ int SetClientData(HRilClient client, void *data) {
     client_prv = (RilClientPrv *)(client->prv);
     client_prv->client_data = data;
 
-    return RIL_CLIENT_ERR_SUCCESS;
+    return 1;
 }
 
 /**
@@ -1366,17 +1442,76 @@ void* GetClientData(HRilClient client) {
  * Convert a modem return value to a RIL client error code.
  */
 extern "C"
-int ConvertReturnValue(int value) {
-    switch (value) {
-        case 0:
-            return RIL_CLIENT_ERR_SUCCESS;
-        case 1:
-            return RIL_CLIENT_ERR_AGAIN;
-        default:
-            if (value < 0)
-                return RIL_CLIENT_ERR_UNKNOWN;
-            return RIL_CLIENT_ERR_SUCCESS;
+int ConvertReturnValue(int modem_value, int send_result, int type, int *out_copy_flag) {
+    static const int map[] = { -5, -3, -6, 0, 0, 0, 0 };
+    int result = -1;
+
+    if (out_copy_flag != NULL) {
+        *out_copy_flag = 0;
     }
+
+    switch (send_result) {
+        case 0:
+            switch (type) {
+                case 1:
+                    if (modem_value == 1000) {
+                        result = -5;
+                    } else {
+                        if (out_copy_flag != NULL) *out_copy_flag = 1;
+                        result = 257;
+                    }
+                    break;
+                case 2:
+                case 4:
+                    if (modem_value >= 1000 && modem_value <= 1003) {
+                        result = map[modem_value - 1000];
+                    } else {
+                        result = 1;
+                    }
+                    break;
+                case 3:
+                    if (modem_value == 1000) {
+                        result = -5;
+                    } else {
+                        if (out_copy_flag != NULL) *out_copy_flag = 1;
+                        result = 4;
+                    }
+                    break;
+                case 5:
+                    if (modem_value == 1000) {
+                        result = -5;
+                    } else {
+                        if (out_copy_flag != NULL) *out_copy_flag = 1;
+                        result = modem_value;
+                    }
+                    break;
+                default:
+                    result = -2;
+                    break;
+            }
+            break;
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+            break;
+        case 8:
+            result = -2;
+            break;
+        case 9:
+            result = -3;
+            break;
+        case 10:
+            result = -4;
+            break;
+        default:
+            result = -7;
+            break;
+    }
+
+    return result;
 }
 
 /**
@@ -1384,29 +1519,25 @@ int ConvertReturnValue(int value) {
  */
 extern "C"
 int callBackSecureSimLock(HRilClient client, const void *data, size_t datalen) {
-    RLOGV(" + %s", __FUNCTION__);
+    (void)client;
 
-    if (client == NULL) {
-        RLOGE("%s: Invalid client", __FUNCTION__);
-        return RIL_CLIENT_ERR_INVAL;
+    RespLen = (int)datalen;
+    if (data != NULL && datalen > 0) {
+        size_t copy_len = datalen;
+        if (copy_len > 0x1D6) {
+            copy_len = 0x1D6;
+        }
+        memcpy(BufferTemp, data, copy_len);
     }
-
-    if (data == NULL || datalen == 0) {
-        RLOGE("%s: Invalid data", __FUNCTION__);
-        return RIL_CLIENT_ERR_INVAL;
-    }
-
-    RLOGD("%s: Secure SIM lock callback received, data length=%zu", __FUNCTION__, datalen);
-
-    RLOGV(" - %s", __FUNCTION__);
-    return RIL_CLIENT_ERR_SUCCESS;
+    condition = 0;
+    return 0;
 }
 
 /**
  * Setup Public Safety PDN (emergency services network).
  */
 extern "C"
-int SetupPublicSafetyPdn(HRilClient client, int state) {
+int SetupPublicSafetyPdn(HRilClient client, int state, RilOnComplete handler) {
     RilClientPrv *client_prv;
     int ret;
     char data[5] = {0,};
@@ -1418,21 +1549,24 @@ int SetupPublicSafetyPdn(HRilClient client, int state) {
 
     client_prv = (RilClientPrv *)(client->prv);
 
-    if (client_prv->sock < 0 ) {
+    if (client_prv->sock < 0) {
         RLOGE("%s: Not connected.", __FUNCTION__);
         return RIL_CLIENT_ERR_CONNECT;
     }
+
+    client_prv->b_del_handler = 1;
 
     data[0] = OEM_FUNC_NETWORK;
     data[1] = OEM_NET_SETUP_PUBLIC_SAFETY_PDN;
     data[2] = 0x00;
     data[3] = 0x05;
-    data[4] = state;
+    data[4] = (char)state;
 
-    RegisterRequestCompleteHandler(client, REQ_SETUP_PDN, NULL);
+    RegisterRequestCompleteHandler(client, REQ_SETUP_PDN, handler);
 
     ret = SendOemRequestHookRaw(client, REQ_SETUP_PDN, data, sizeof(data));
     if (ret != RIL_CLIENT_ERR_SUCCESS) {
+        RLOGE("%s: failed.", __FUNCTION__);
         RegisterRequestCompleteHandler(client, REQ_SETUP_PDN, NULL);
     }
 
