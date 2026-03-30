@@ -36,6 +36,8 @@
 
 /dev/rfkill                  u:object_r:rfkill_device:s0
 
+/dev/radio0                  u:object_r:fm_radio_device:s0
+
 /dev/esfp0                   u:object_r:fingerprint_device:s0
 /dev/vfsspi                  u:object_r:fingerprint_device:s0
 
