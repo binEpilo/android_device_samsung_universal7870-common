@@ -1,0 +1,7 @@
+###FILE###:proprietary-files_P_gtactive2lte_keymaster.txt
+# T395XXSDCVA1
+
+# Keystore & Keymaster
+system/vendor/lib/hw/keystore.mdfpp.so:vendor/lib/hw/keystore.mdfpp.so
+system/vendor/lib/libkeymaster_helper.so:vendor/lib/libkeymaster_helper.so
+system/vendor/lib/libkeymaster_mdfpp.so:vendor/lib/libkeymaster_mdfpp.so

@@ -1,0 +1,6 @@
+###FILE###:proprietary-files_P_j5y17lte_audio.txt
+# M105FDDS5CWA1
+
+# Audio
+system/vendor/etc/Tfa9890.cnt:vendor/etc/Tfa9890.cnt
+

@@ -1,0 +1,3 @@
+###FILE###:proprietary-files_O_a3y17lte_camera.txt
+-system/lib/libstainkiller.so:vendor/lib/libstainkiller.so
+-system/lib/libuniplugin.so:vendor/lib/libuniplugin.so

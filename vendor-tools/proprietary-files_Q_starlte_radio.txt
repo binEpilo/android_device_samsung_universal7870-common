@@ -1,4 +1,4 @@
-###FILE###:proprietary-files_starlte_radio.txt
+###FILE###:proprietary-files_Q_starlte_radio.txt
 # G960FXXUHFVG4
 
 # VNDK
@@ -47,11 +47,6 @@ vendor/etc/mtu-conf.xml
 # RIL Audio
 -vendor/lib/libaudio-ril.so
 
-
-
-###FILE###:proprietary-files_starlte.txt
-# G960FXXUHFVG4
-
 # AptX
 -system/system/lib64/libaptX_encoder.so:product/lib64/libaptX_encoder.so
 
@@ -59,5 +54,6 @@ vendor/etc/mtu-conf.xml
 -vendor/lib/libfloatingfeature.so
 -vendor/lib64/libfloatingfeature.so
 vendor/etc/floating_feature.xml
+
 
 
