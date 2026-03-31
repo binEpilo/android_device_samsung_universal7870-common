@@ -20,7 +20,7 @@ REPO_URLS=(
     "https://github.com/Exynos7870-labs/samsung_m10lte_dump.git -b m10ltedx-user-10-QP1A.190711.020-M105GDXSACWA1-release-keys M105GDXSACWA1"
     "https://github.com/Exynos7870-labs/samsung_j5y17lte_dump.git -b j5y17ltexx-user-9-PPR1.180610.011-J530FXXS8CUE4-release-keys J530FXXS8CUE4"
     "https://github.com/Exynos7870-labs/samsung_gtactive2lte_dump.git -b gtactive2ltexx-user-9-PPR1.180610.011-T395XXSDCVA1-release-keys T395XXSDCVA1"
-    "https://github.com/Exynos7870-labs/samsung_starlte_dump.git -b starltexx-user-10-QP1A.190711.020-G960FXXUHFVG4-release-keys G960FXXUHFVG4"
+    "https://github.com/Exynos7870-labs/samsung_j7duolte_dump.git -b j7duoltedd-user-10-QP1A.190711.020-J720FDDS7CUL1-release-keys J720FDDS7CUL1"
     "https://github.com/Exynos7870-labs/samsung_a7y17lteskt_dump.git -b a7y17lteskt-user-9-PPR1.180610.011-A720SKSU5CUJ2-release-keys A720SKSU5CUJ2"
     "https://github.com/Exynos7870-labs/samsung_slsi_oss.git -b lineage-18.1_17-11-2025 lineage-18_17-11-2025"
 )
@@ -50,7 +50,7 @@ COMMON_P_A7Y17LTE_PATH="${TARGET_SOURCES_DIR}/A720SKSU5CUJ2"
 COMMON_P_J5Y17LTE_PATH="${TARGET_SOURCES_DIR}/J530FXXS8CUE4"
 COMMON_P_GTACTIVE2LTE_PATH="${TARGET_SOURCES_DIR}/T395XXSDCVA1"
 COMMON_Q_M10LTE_PATH="${TARGET_SOURCES_DIR}/M105GDXSACWA1"
-COMMON_Q_STARLTE_PATH="${TARGET_SOURCES_DIR}/G960FXXUHFVG4"
+COMMON_Q_J7DUOLTE_PATH="${TARGET_SOURCES_DIR}/J720FDDS7CUL1"
 COMMON_P_GRACERLTE_PATH="${TARGET_SOURCES_DIR}/N935KKKU4CVG1"
 COMMON_R_OSS_PATH="${TARGET_SOURCES_DIR}/lineage-18_17-11-2025"
 
@@ -70,7 +70,7 @@ COMMON_R_OSS_PATH="${TARGET_SOURCES_DIR}/lineage-18_17-11-2025"
 #proprietary-files_Q_m10lte_media.txt
 #proprietary-files_Q_m10lte_radio.txt
 #proprietary-files_Q_m10lte_sensors.txt
-#proprietary-files_Q_starlte_radio.txt
+#proprietary-files_Q_j7duolte_radio.txt
 #proprietary-files_R_oss_hwc.txt
 
 
@@ -94,7 +94,7 @@ COMMON_R_OSS_PATH="${TARGET_SOURCES_DIR}/lineage-18_17-11-2025"
 
 # Radio files
 ./extract-files.sh universal7870-common/radio vendor-tools/proprietary-files_Q_m10lte_radio.txt -n -k $COMMON_Q_M10LTE_PATH
-./extract-files.sh universal7870-common/radio vendor-tools/proprietary-files_Q_starlte_radio.txt -n -k $COMMON_Q_STARLTE_PATH
+./extract-files.sh universal7870-common/radio vendor-tools/proprietary-files_Q_j7duolte_radio.txt -n -k $COMMON_Q_J7DUOLTE_PATH
 
 # Sensors files
 ./extract-files.sh universal7870-common/sensors vendor-tools/proprietary-files_Q_m10lte_sensors.txt -n -k $COMMON_Q_M10LTE_PATH

@@ -609,9 +609,7 @@ case "${VENDOR}" in
                 VENDOR_DEVICE_MAKEFILE_CASE="${ANDROID_ROOT}/vendor/${VENDOR}/${DEVICE_COMMON}/${DEVICE_COMMON}-vendor.mk"
                 if ! grep -q "# Keymaster" "${VENDOR_DEVICE_MAKEFILE}" ; then
                     echo "# Keymaster" >> "${VENDOR_DEVICE_MAKEFILE}"
-                    echo "ifeq (\$(TARGET_DEVICE_HAS_SEC_KEYMASTER),true)" >> "${VENDOR_DEVICE_MAKEFILE}"
                     echo "-include vendor/samsung/universal7870-common/keymaster/keymaster-vendor.mk" >> "${VENDOR_DEVICE_MAKEFILE}"
-                    echo "endif" >> "${VENDOR_DEVICE_MAKEFILE}"
                     echo "" >> "${VENDOR_DEVICE_MAKEFILE}"
                     echo "Added Keymaster to makefile"
                 else
