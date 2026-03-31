@@ -140,6 +140,12 @@ write_headers "a3y17lte j5y17lte a6lte j6lte j7velte j7xelte j7y17lte on7xelte m
 # The standard blobs
 write_makefiles "${EFFECTIVE_PROPRIETARY_FILE}" true
 
+# Force Android.bp owner to samsung
+ANDROID_BP_FILE="${ANDROID_ROOT}/vendor/${VENDOR}/${DEVICE_COMMON}/Android.bp"
+if [ -f "${ANDROID_BP_FILE}" ]; then
+    sed -i 's|owner: "samsung/universal7870-common"|owner: "samsung"|g' "${ANDROID_BP_FILE}"
+fi
+
 append_content() {
     local content="# Create Mali links for Vulkan and OpenCL
 PRODUCT_PACKAGES += \\
