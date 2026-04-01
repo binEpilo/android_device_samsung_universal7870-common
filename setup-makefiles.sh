@@ -450,6 +450,17 @@ LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_SHARED_LIBRARIES := libc libdl liblog libm
 include \$(BUILD_PREBUILT)
 
+include \$(CLEAR_VARS)
+LOCAL_MODULE := libtfa98xx
+LOCAL_MODULE_OWNER := samsung
+LOCAL_VENDOR_MODULE := true
+LOCAL_SRC_FILES_32 := audio/\$(LOCAL_AUDIO_VARIANT_DIR)/proprietary/vendor/lib/libtfa98xx.so
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_SUFFIX := .so
+LOCAL_MULTILIB := 32
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_SHARED_LIBRARIES := libcutils libutils liblog libc++ libc libm libdl
+include \$(BUILD_PREBUILT)
 
 include \$(CLEAR_VARS)
 LOCAL_MODULE := libalsa7870
