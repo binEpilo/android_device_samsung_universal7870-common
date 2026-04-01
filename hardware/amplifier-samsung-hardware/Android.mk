@@ -26,7 +26,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libcutils \
 	libhardware \
-	libtfa98xx \
+	libtfa98xx_oss \
 	libtinyalsa
 endif
 
@@ -36,6 +36,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libcutils \
 	libhardware \
+	libtfa98xx_oss \
 	libtinyalsa
 endif
 
@@ -66,7 +67,6 @@ ifeq ($(TARGET_BOARD_TFA_MODEL),9896)
         tfa9896/tfa.c
     LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9896/include
     LOCAL_CFLAGS += -DTFA_MODEL_9896
-    LOCAL_C_INCLUDES += $(LOCAL_PATH)/tfa9896/include
 endif
 
 LOCAL_CFLAGS := -Werror -Wall

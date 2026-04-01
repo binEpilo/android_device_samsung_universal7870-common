@@ -28,7 +28,6 @@
 #include <unistd.h>
 
 #include <hardware/audio_amplifier.h>
-#include <system/audio.h>
 
 #include "../audio_device_types.h"
 #include "tfa.h"
@@ -190,7 +189,7 @@ static int amp_module_open(const hw_module_t *module, const char *name,
         return -EBUSY;
     }
 
-    tfa_dev = tfa_device_open();
+    tfa_dev = tfa_dev_open();
     if (tfa_dev == NULL) {
         ALOGE("%s: Unable to open amplifier device", __func__);
         return -ENOENT;
@@ -240,7 +239,7 @@ amplifier_module_t HAL_MODULE_INFO_SYM = {
         .hal_api_version = HARDWARE_HAL_API_VERSION,
         .id = AMPLIFIER_HARDWARE_MODULE_ID,
         .name = "Samsung TFA9896 amplifier HAL",
-        .author = "Christopher N. Hesse",
+        .author = "Christopher N. Hesse & FlominatorGD",
         .methods = &hal_module_methods,
     },
 };

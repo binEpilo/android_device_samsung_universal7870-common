@@ -18,11 +18,11 @@
 #define LOG_NDEBUG 0
 
 #include <cutils/log.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <errno.h>
-#include <dlfcn.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -30,12 +30,15 @@
 
 #include "tfa.h"
 
-static void * write_dummy_data(void *param) {
+/*
+ * Dummy write thread to provide I2S clock while amplifier is enabled.
+ */
+static void *write_dummy_data(void *param) {
     tfa_device_t *t = (tfa_device_t *) param;
-    uint8_t *buffer;
-    int size;
+    struct pcm *pcm = NULL;
+    uint8_t *buffer = NULL;
+    size_t buffer_size = 1024 * 8;
     int write_count = 0;
-    struct pcm *pcm;
     bool signaled = false;
 
     struct pcm_config config = {
@@ -50,21 +53,23 @@ static void * write_dummy_data(void *param) {
         .avail_min = 1,
     };
 
-    /* Open device 0 for dummy clock. TFA setup happens before playback stream opens. */
-    pcm = pcm_open(0, 0, PCM_OUT | PCM_MONOTONIC, &config);
-    if (!pcm || !pcm_is_ready(pcm)) {
-        ALOGE("pcm_open failed: %s", pcm_get_error(pcm));
-        if (pcm && errno != EBUSY) {
-            goto err_close_pcm;
-        }
+    buffer = calloc(1, buffer_size);
+    if (!buffer) {
+        ALOGE("%s: failed to allocate buffer", __func__);
         goto exit;
     }
 
-    size = 1024 * 8;
-    buffer = calloc(1, size);
-    if (!buffer) {
-        ALOGE("%s: failed to allocate buffer", __func__);
-        goto err_close_pcm;
+    /* Open device 0 for dummy clock. TFA setup happens before playback stream opens. */
+    pcm = pcm_open(0, 0, PCM_OUT | PCM_MONOTONIC, &config);
+    if (!pcm || !pcm_is_ready(pcm)) {
+        if (pcm) {
+            ALOGE("%s: pcm_open failed: %s", __func__, pcm_get_error(pcm));
+            pcm_close(pcm);
+            pcm = NULL;
+        } else {
+            ALOGE("%s: pcm_open failed (out of memory)", __func__);
+        }
+        goto exit;
     }
 
     ALOGI("%s: PCM opened for dummy clock - writing to establish I2S", __func__);
@@ -74,11 +79,12 @@ static void * write_dummy_data(void *param) {
     const int MAX_EARLY_EXIT_BUFFERS = 20;  // ~2.5ms at 48kHz stereo
     
     while (write_count < MAX_EARLY_EXIT_BUFFERS && t->initializing) {
-        if (pcm_write(pcm, buffer, size)) {
-            ALOGE("%s: pcm_write failed", __func__);
+        if (pcm_write(pcm, buffer, buffer_size) != 0) {
+            ALOGE("%s: pcm_write failed at write %d", __func__, write_count + 1);
             break;
         }
         write_count++;
+
         if (!signaled) {
             pthread_mutex_lock(&t->mutex);
             t->writing = true;
@@ -88,44 +94,65 @@ static void * write_dummy_data(void *param) {
         }
     }
 
-    ALOGI("%s: Wrote %d buffers, closing PCM to release for playback", __func__, write_count);
-    t->writing = false;
+    if (pcm) {
+        ALOGI("%s: Wrote %d buffers, closing PCM device to release for playback", __func__, write_count);
+        pcm_close(pcm);
+        pcm = NULL;
+    }
+    free(buffer);
 
-
-err_close_pcm:
-    pcm_close(pcm);
 exit:
+    /* Ensure we signal even if we never succeeded */
     if (!signaled) {
         pthread_mutex_lock(&t->mutex);
         t->writing = true;
         pthread_cond_signal(&t->cond);
         pthread_mutex_unlock(&t->mutex);
     }
+    ALOGI("%s: I2S clock thread exiting", __func__);
 
     return NULL;
 }
 
+/*
+ * Turn on the I2S clock by starting the dummy write thread.
+ */
 static int tfa_clock_on(tfa_device_t *tfa_dev)
 {
     if (tfa_dev->clock_enabled) {
         ALOGW("%s: clocks already on", __func__);
-        return -EBUSY;
+        return 0;
     }
 
     tfa_dev->initializing = true;
-    pthread_create(&tfa_dev->write_thread, NULL, write_dummy_data, tfa_dev);
+    tfa_dev->writing = false;
+
+    if (pthread_create(&tfa_dev->write_thread, NULL, write_dummy_data, tfa_dev) != 0) {
+        ALOGE("%s: failed to create write thread", __func__);
+        tfa_dev->initializing = false;
+        return -1;
+    }
+
     pthread_mutex_lock(&tfa_dev->mutex);
     while (!tfa_dev->writing) {
         pthread_cond_wait(&tfa_dev->cond, &tfa_dev->mutex);
     }
     pthread_mutex_unlock(&tfa_dev->mutex);
+
+    if (!tfa_dev->initializing) {
+        // Thread exited prematurely
+        ALOGE("%s: write thread exited prematurely", __func__);
+        return -1;
+    }
+
     tfa_dev->clock_enabled = true;
-
     ALOGI("%s: clocks enabled", __func__);
-
     return 0;
 }
 
+/*
+ * Turn off the I2S clock by stopping the dummy write thread.
+ */
 static int tfa_clock_off(tfa_device_t *tfa_dev)
 {
     if (!tfa_dev->clock_enabled) {
@@ -136,93 +163,58 @@ static int tfa_clock_off(tfa_device_t *tfa_dev)
     tfa_dev->initializing = false;
     pthread_join(tfa_dev->write_thread, NULL);
     tfa_dev->clock_enabled = false;
+    tfa_dev->writing = false;
 
     ALOGI("%s: clocks disabled", __func__);
-
     return 0;
 }
 
 /*
- * Loads the vendor amplifier library and grabs the needed functions.
- *
- * @param tfa_dev Device handle.
- *
- * @return 0 on success, <0 on error.
- */
-static int load_tfa_lib(tfa_device_t *tfa_dev) {
-    if (access(TFA_LIBRARY_PATH, R_OK) < 0) {
-        ALOGE("%s: amplifier library %s not found", __func__, TFA_LIBRARY_PATH);
-        return -errno;
-    }
-
-    tfa_dev->lib_handle = dlopen(TFA_LIBRARY_PATH, RTLD_NOW);
-    if (tfa_dev->lib_handle == NULL) {
-        ALOGE("%s: dlopen failed for %s (%s)", __func__, TFA_LIBRARY_PATH, dlerror());
-        return -1;
-    } else {
-        ALOGV("%s: dlopen successful for %s", __func__, TFA_LIBRARY_PATH);
-    }
-
-    tfa_dev->tfa_device_open = (tfa_device_open_t)dlsym(tfa_dev->lib_handle, "tfa_device_open");
-    if (tfa_dev->tfa_device_open == NULL) {
-        ALOGE("%s: dlsym error %s for tfa_device_open", __func__, dlerror());
-        tfa_dev->tfa_device_open = 0;
-        return -1;
-    }
-
-    tfa_dev->tfa_enable = (tfa_enable_t)dlsym(tfa_dev->lib_handle, "tfa_enable");
-    if (tfa_dev->tfa_enable == NULL) {
-        ALOGE("%s: dlsym error %s for tfa_enable", __func__, dlerror());
-        tfa_dev->tfa_enable = 0;
-        return -1;
-    }
-
-    return 0;
-}
-
-/*
- * Hooks into the vendor library and enables/disables the amplifier IC.
- *
- * @param tfa_dev Device handle.
- * @param on true or false for enabling/disabling of the IC.
- *
- * @return 0 on success, != 0 on error.
+ * Enables/disables the amplifier IC.
  */
 int tfa_power(tfa_device_t *tfa_dev, bool on) {
     int rc = 0;
 
     ALOGV("%s: %s amplifier device", __func__, on ? "Enabling" : "Disabling");
     pthread_mutex_lock(&tfa_dev->tfa_lock);
+
     if (on) {
+        // Optional: reset some handle field if needed
         if (tfa_dev->tfa_handle->a1 != 0) {
             tfa_dev->tfa_handle->a1 = 0;
         }
-    }
 
-    // this implementation requires explicit clock control
-    if (on) {
-        tfa_clock_on(tfa_dev);
-    }
+        rc = tfa_clock_on(tfa_dev);
+        if (rc != 0) {
+            ALOGE("%s: Failed to start clock", __func__);
+            pthread_mutex_unlock(&tfa_dev->tfa_lock);
+            return rc;
+        }
 
-    rc = tfa_dev->tfa_enable(tfa_dev->tfa_handle, on ? 1 : 0);
-    if (rc) {
-        ALOGE("%s: Failed to %s amplifier device", __func__, on ? "enable" : "disable");
-    }
-
-    if (tfa_dev->clock_enabled) {
+        rc = tfa_enable(tfa_dev->tfa_handle, 1);
+        if (rc != 0) {
+            ALOGE("%s: Failed to enable amplifier", __func__);
+            tfa_clock_off(tfa_dev);
+        } else {
+            /* Done with temporary dummy clock; playback path will provide actual clock. */
+            tfa_clock_off(tfa_dev);
+        }
+    } else {
+        rc = tfa_enable(tfa_dev->tfa_handle, 0);
+        if (rc != 0) {
+            ALOGE("%s: Failed to disable amplifier", __func__);
+        }
         tfa_clock_off(tfa_dev);
     }
-    pthread_mutex_unlock(&tfa_dev->tfa_lock);
 
+    pthread_mutex_unlock(&tfa_dev->tfa_lock);
     return rc;
 }
 
 /*
- * Initializes the amplifier device and local class data.
- *
- * @return tfa_device_t on success, NULL on error.
+ * Initializes the amplifier device.
  */
-tfa_device_t * tfa_device_open() {
+tfa_device_t * tfa_dev_open() {
     tfa_device_t *tfa_dev;
     int rc;
 
@@ -230,77 +222,76 @@ tfa_device_t * tfa_device_open() {
 
     tfa_dev = (tfa_device_t *) malloc(sizeof(tfa_device_t));
     if (tfa_dev == NULL) {
-        ALOGE("%s: Not enough memory to load the lib handle", __func__);
+        ALOGE("%s: Not enough memory for device struct", __func__);
         return NULL;
     }
 
-    // allocate memory for tfa handle
     tfa_dev->tfa_handle = malloc(sizeof(tfa_handle_t));
     if (tfa_dev->tfa_handle == NULL) {
-        ALOGE("%s: Not enough memory to load the tfa handle", __func__);
+        ALOGE("%s: Not enough memory for tfa handle", __func__);
+        free(tfa_dev);
         return NULL;
     }
 
-    rc = load_tfa_lib(tfa_dev);
-    if (rc < 0) {
-        ALOGE("%s: Failed to load amplifier library", __func__);
-        return NULL;
-    }
+    // Initialize synchronization primitives
+    pthread_mutex_init(&tfa_dev->tfa_lock, NULL);
+    pthread_mutex_init(&tfa_dev->mutex, NULL);
+    pthread_cond_init(&tfa_dev->cond, NULL);
+    tfa_dev->writing = false;
+    tfa_dev->clock_enabled = false;
 
-    rc = tfa_dev->tfa_device_open(tfa_dev->tfa_handle, 0);
+    // Call vendor open function directly
+    rc = tfa_device_open(tfa_dev->tfa_handle, 0);
     if (rc < 0) {
         ALOGE("%s: Failed to open amplifier device", __func__);
-        return NULL;
+        goto err;
     }
 
-    pthread_mutex_init(&tfa_dev->tfa_lock, (const pthread_mutexattr_t *) NULL);
-
+    // Perform initial power cycle to ensure known state
     rc = tfa_power(tfa_dev, false);
     if (rc < 0) {
         ALOGE("%s: Failed to do initial amplifier powerdown", __func__);
-        return NULL;
+        goto err;
     }
-
-    // do a full powerup - powerdown cycle and initialize clocks
-    tfa_dev->writing = false;
-    tfa_dev->clock_enabled = false;
-    pthread_mutex_init(&tfa_dev->mutex, NULL);
-    pthread_cond_init(&tfa_dev->cond, NULL);
 
     rc = tfa_power(tfa_dev, true);
     if (rc < 0) {
         ALOGE("%s: Failed to do initial amplifier powerup", __func__);
-        return NULL;
-    } else {
-        rc = tfa_power(tfa_dev, false);
-        if (rc < 0) {
-            ALOGE("%s: Failed to do initial amplifier powerdown (2)", __func__);
-            return NULL;
-        }
+        goto err;
     }
 
+    rc = tfa_power(tfa_dev, false);
+    if (rc < 0) {
+        ALOGE("%s: Failed to do final amplifier powerdown", __func__);
+        goto err;
+    }
+
+    ALOGI("%s: TFA amplifier initialized successfully", __func__);
     return tfa_dev;
+
+err:
+    if (tfa_dev->tfa_handle) free(tfa_dev->tfa_handle);
+    pthread_mutex_destroy(&tfa_dev->tfa_lock);
+    pthread_mutex_destroy(&tfa_dev->mutex);
+    pthread_cond_destroy(&tfa_dev->cond);
+    free(tfa_dev);
+    return NULL;
 }
 
 /*
- * De-Initializes the amplifier device.
+ * De-initializes the amplifier device.
  */
 void tfa_device_close(tfa_device_t *tfa_dev) {
+    if (!tfa_dev) return;
+
     ALOGV("%s: Closing amplifier device", __func__);
     tfa_power(tfa_dev, false);
 
     pthread_mutex_destroy(&tfa_dev->tfa_lock);
+    pthread_mutex_destroy(&tfa_dev->mutex);
+    pthread_cond_destroy(&tfa_dev->cond);
 
-    if (tfa_dev->tfa_handle) {
-        free(tfa_dev->tfa_handle);
-    }
-
-    if (tfa_dev->lib_handle) {
-        dlclose(tfa_dev->lib_handle);
-    }
-
-    if (tfa_dev) {
-        free(tfa_dev);
-    }
+    free(tfa_dev->tfa_handle);
+    free(tfa_dev);
+    ALOGI("%s: TFA amplifier closed", __func__);
 }
-

@@ -50,7 +50,7 @@ LOCAL_SRC_FILES:= 	hal/src/NXP_I2C.c  \
 			srv/src/tfa98xxDiagnostics.c \
 			app/exTfa98xx/src/main_container.c
 
-LOCAL_MODULE := libtfa98xx
+LOCAL_MODULE := libtfa98xx_oss
 LOCAL_VENDOR_MODULE := true
 LOCAL_MULTILIB := 32
 LOCAL_SHARED_LIBRARIES:= libcutils libutils liblog
