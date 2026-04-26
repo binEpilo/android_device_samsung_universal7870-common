@@ -264,21 +264,31 @@ LOCAL_AUDIO_VARIANT_DIR := sec_tfa
 LOCAL_USE_J7DOULTE_VNDSECRIL := true
 endif
 
+include \$(CLEAR_VARS)
+LOCAL_MODULE := libaudio-ril
+LOCAL_MODULE_OWNER := samsung
+LOCAL_VENDOR_MODULE := true
+LOCAL_SRC_FILES_32 := radio/proprietary/vendor/lib/libaudio-ril.so
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_SUFFIX := .so
+LOCAL_MULTILIB := 32
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_SHARED_LIBRARIES := liblog libcutils libutils libvndsecril-client libc++ libc libm libdl
+include \$(BUILD_PREBUILT)
 
-ifeq (\$(LOCAL_USE_J7DOULTE_VNDSECRIL),true)
-#include \$(CLEAR_VARS)
-#LOCAL_MODULE := libvndsecril-client
-#LOCAL_MODULE_OWNER := samsung
-#LOCAL_VENDOR_MODULE := true
-#LOCAL_SRC_FILES_64 := sec_radio/proprietary/vendor/lib64/libvndsecril-client.so
-#LOCAL_SRC_FILES_32 := sec_radio/proprietary/vendor/lib/libvndsecril-client.so
-#LOCAL_MULTILIB := both
-#LOCAL_MODULE_TAGS := optional
-#LOCAL_MODULE_SUFFIX := .so
-#LOCAL_MODULE_CLASS := SHARED_LIBRARIES
-#LOCAL_SHARED_LIBRARIES := liblog libcutils libhardware_legacy libfloatingfeature libc++ libc libm libdl
-#include \$(BUILD_PREBUILT)
-endif
+
+include \$(CLEAR_VARS)
+LOCAL_MODULE := libvndsecril-client
+LOCAL_MODULE_OWNER := samsung
+LOCAL_VENDOR_MODULE := true
+LOCAL_SRC_FILES_64 := sec_radio/proprietary/vendor/lib64/libvndsecril-client.so
+LOCAL_SRC_FILES_32 := sec_radio/proprietary/vendor/lib/libvndsecril-client.so
+LOCAL_MULTILIB := both
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_SUFFIX := .so
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_SHARED_LIBRARIES := liblog libcutils libhardware_legacy libfloatingfeature libc++ libc libm libdl
+include \$(BUILD_PREBUILT)
 
 ifeq (\$(LOCAL_EXYNOS7870_AUDIO_GUARD),true)
 include \$(CLEAR_VARS)
@@ -644,6 +654,7 @@ case "${VENDOR}" in
                 VENDOR_DEVICE_MAKEFILE_CASE="${ANDROID_ROOT}/vendor/${VENDOR}/${DEVICE_COMMON}/${DEVICE_COMMON}-vendor.mk"
                 # those shoud not be copyied, they are handeld by modules
                 sed -i -E '/libvndsecril-client\.so/d' "$VENDOR_DEVICE_MAKEFILE_CASE"
+                sed -i -E '/libaudio-ril\.so/d' "$VENDOR_DEVICE_MAKEFILE_CASE"
 
                 if ! grep -q "# Radio" "${VENDOR_DEVICE_MAKEFILE}" ; then
                     echo "# Radio" >> "${VENDOR_DEVICE_MAKEFILE}"

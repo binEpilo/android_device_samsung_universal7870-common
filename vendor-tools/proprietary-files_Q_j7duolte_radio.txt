@@ -34,7 +34,7 @@ vendor/etc/pdpcnt-conf.xml
 vendor/etc/mtu-conf.xml
 
 # RIL Audio
--vendor/lib/libaudio-ril.so
+vendor/lib/libaudio-ril.so
 
 # AptX
 -system/system/lib64/libaptX_encoder.so:product/lib64/libaptX_encoder.so
