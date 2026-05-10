@@ -54,10 +54,10 @@ LOCAL_C_INCLUDES += \
 
 ifeq ($(BOARD_USE_VNDSECRIL), true)
 LOCAL_C_INCLUDES += \
-	$(LOCAL_PATH)/../libvndsecril-client \
+	$(LOCAL_PATH)/../libvndsecril-client
 else
 LOCAL_C_INCLUDES += \
-	hardware/samsung/ril/libsecril-client \
+	hardware/samsung/ril/libsecril-client
 endif
 
 LOCAL_C_INCLUDES += \
