@@ -50,8 +50,17 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/include \
 	external/tinyalsa/include \
 	external/tinycompress/include \
-	hardware/libhardware/include \
+	hardware/libhardware/include
+
+ifeq ($(BOARD_USE_VNDSECRIL), true)
+LOCAL_C_INCLUDES += \
+	$(LOCAL_PATH)/../libvndsecril-client \
+else
+LOCAL_C_INCLUDES += \
 	hardware/samsung/ril/libsecril-client \
+endif
+
+LOCAL_C_INCLUDES += \
 	$(call include-path-for, audio-utils) \
 	$(call include-path-for, audio-route) \
 	$(call include-path-for, audio-effects)
