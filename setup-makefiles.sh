@@ -281,8 +281,8 @@ include \$(CLEAR_VARS)
 LOCAL_MODULE := libvndsecril-client
 LOCAL_MODULE_OWNER := samsung
 LOCAL_VENDOR_MODULE := true
-LOCAL_SRC_FILES_64 := sec_radio/proprietary/vendor/lib64/libvndsecril-client.so
-LOCAL_SRC_FILES_32 := sec_radio/proprietary/vendor/lib/libvndsecril-client.so
+LOCAL_SRC_FILES_64 := radio/proprietary/vendor/lib64/libvndsecril-client.so
+LOCAL_SRC_FILES_32 := radio/proprietary/vendor/lib/libvndsecril-client.so
 LOCAL_MULTILIB := both
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_SUFFIX := .so
