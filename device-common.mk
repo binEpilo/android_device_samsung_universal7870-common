@@ -366,6 +366,7 @@ PRODUCT_PACKAGES += \
     libprotobuf-cpp-lite-vendorcompat \
     android.hardware.radio.config@1.2 \
     rild \
+    cbd \
     libxml2
 
 # Recorder
