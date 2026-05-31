@@ -118,6 +118,9 @@ BOARD_USE_OFFLOAD_EFFECT := false
 BOARD_USE_VNDSECRIL := true
 BOARD_USE_SOUNDTRIGGER_HAL_EXYNOS := false
 
+#Modem
+MODEM_USE_EXYNOS := true
+
 # Backlight
 BACKLIGHT_PATH := "/sys/class/backlight/panel/brightness"
 
