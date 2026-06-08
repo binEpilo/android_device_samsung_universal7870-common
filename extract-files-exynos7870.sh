@@ -76,7 +76,7 @@ COMMON_R_OSS_PATH="${TARGET_SOURCES_DIR}/lineage-18_17-11-2025"
 
 # Camera files
 ./extract-files.sh universal7870-common/camera/O vendor-tools/proprietary-files_O_a3y17lte_camera.txt -n -k $COMMON_O_A3Y17LTE_PATH
-./extract-files.sh universal7870-common/camera/P vendor-tools/proprietary-files_P_J5y17lte_camera.txt -n -k $COMMON_P_J5Y17LTE_PATH
+./extract-files.sh universal7870-common/camera/P vendor-tools/proprietary-files_P_j5y17lte_camera.txt -n -k $COMMON_P_J5Y17LTE_PATH
 ./extract-files.sh universal7870-common/camera/Q vendor-tools/proprietary-files_Q_m10lte_camera.txt -n -k $COMMON_Q_M10LTE_PATH
 
 # Audio files
