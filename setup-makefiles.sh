@@ -540,6 +540,21 @@ case "${VENDOR}" in
                     echo "Camera Q already in makefile"
                 fi
                 ;;
+
+            P)
+                VENDOR_DEVICE_MAKEFILE_CASE="${ANDROID_ROOT}/vendor/${VENDOR}/${DEVICE_COMMON}/${DEVICE_COMMON}-vendor.mk"
+                
+                if ! grep -q "# Camera P Version" "${VENDOR_DEVICE_MAKEFILE}"; then
+                    echo "# Camera P Version" >> "${VENDOR_DEVICE_MAKEFILE}"
+                    echo "ifeq (\$(TARGET_DEVICE_CAMERA_VER),P)" >> "${VENDOR_DEVICE_MAKEFILE}"
+                    echo "-include vendor/samsung/universal7870-common/camera/P/P-vendor.mk" >> "${VENDOR_DEVICE_MAKEFILE}"
+                    echo "endif" >> "${VENDOR_DEVICE_MAKEFILE}"
+                    echo "" >> "${VENDOR_DEVICE_MAKEFILE}"
+                    echo "Added Camera P to makefile"
+                else
+                    echo "Camera P already in makefile"
+                fi
+                ;;
             O)
                 VENDOR_DEVICE_MAKEFILE_CASE="${ANDROID_ROOT}/vendor/${VENDOR}/${DEVICE_COMMON}/${DEVICE_COMMON}-vendor.mk"
                 

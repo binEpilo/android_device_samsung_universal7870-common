@@ -1,0 +1,4 @@
+###FILE###:proprietary-files_P_j5y17lte_camera.txt
+-system/lib/libstainkiller.so:vendor/lib/libstainkiller.so
+-system/lib/libuniplugin.so:vendor/lib/libuniplugin.so
+
