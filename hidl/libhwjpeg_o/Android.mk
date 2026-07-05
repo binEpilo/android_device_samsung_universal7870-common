@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ifeq ($(TARGET_USES_EXYNOS7870_LIBHWJPEG),true)
+ifeq ($(TARGET_USES_EXYNOS7870_LIBHWJPEG_O),true)
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
