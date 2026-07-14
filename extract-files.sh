@@ -54,34 +54,6 @@ function blob_fixup() {
             esac
         
         ;;
-            
-        vendor/lib/libaudior7870.so)
-            case "${2}" in
-                */sec/*)
-                    # Fix libaudior7870.so sec
-                    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${2}"
-                    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${2}"
-                    ;;
-                */sec_tfa/*)
-                    # Fix libaudior7870.so sec tfa
-                    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${2}"
-                    sed -i 's|libaudioroute.so|libaudior7870.so|g' "${2}"
-                    ;;
-            esac
-            ;;
-        
-        vendor/lib/libalsa7870.so)
-            case "${2}" in
-                */sec/*)
-                    # Fix libalsa7870.so sec
-                    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${2}"
-                    ;;
-                */sec_tfa/*)
-                    # Fix libalsa7870.so sec tfa
-                    sed -i 's|libtinyalsa.so|libalsa7870.so|g' "${2}"
-                    ;;
-            esac
-            ;;
         
         vendor/lib*/hw/memtrack.exynos7870.so)
             # Fix memtrack for both lib and lib64
