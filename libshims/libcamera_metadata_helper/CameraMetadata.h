@@ -36,6 +36,11 @@ class CameraMetadata {
      * dataCapacity extra storage */
     CameraMetadata(size_t entryCapacity, size_t dataCapacity = 10);
 
+    /**
+     * Move constructor, acquires other's metadata buffer
+     */
+    CameraMetadata(CameraMetadata &&other);
+
     ~CameraMetadata();
 
     /** Takes ownership of passed-in buffer */
@@ -48,6 +53,11 @@ class CameraMetadata {
      */
     CameraMetadata &operator=(const CameraMetadata &other);
     CameraMetadata &operator=(const camera_metadata_t *buffer);
+
+    /**
+     * Move assignment operator, acquires other's metadata buffer
+     */
+    CameraMetadata &operator=(CameraMetadata &&other);
 
     /**
      * Get reference to the underlying metadata buffer. Ownership remains with

@@ -22,6 +22,8 @@
 
 #include <pthread.h>
 
+#include <linux/videodev2.h>
+
 #include "ExynosJpegApi.h"
 #include <hardware/exynos/ExynosExif.h>
 
