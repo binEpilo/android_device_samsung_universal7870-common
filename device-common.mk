@@ -132,6 +132,8 @@ PRODUCT_PACKAGES += \
     libstagefright_shim \
     camera.exynos7870 \
 	camera.vendor.exynos7870 \
+	libexynoscamera \
+	libexynoscamera3 \
     libcamera_metadata_helper \
     libcsc \
     libhwjpeg \
