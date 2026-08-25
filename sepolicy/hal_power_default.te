@@ -1,8 +1,5 @@
-# Allow reading of sysfs nodes to find input devices
-allow hal_power_default sysfs:dir r_dir_perms;
-allow hal_power_default sysfs:file rw_file_perms;
-
 # Input devices
+allow hal_power_default sysfs_input:dir r_dir_perms;
 allow hal_power_default sysfs_input:file r_file_perms;
 
 # CPU devices
@@ -17,6 +14,5 @@ allow hal_power_default sysfs_light:file rw_file_perms;
 allow hal_power_default sysfs_graphics:dir search;
 allow hal_power_default sysfs_graphics:file rw_file_perms;
 
-# virtual
-allow hal_power_default sysfs_virtual:dir r_dir_perms;
-allow hal_power_default sysfs_virtual:file r_file_perms;
+# virtual (for navigating to subdirs under /sys/devices/virtual/)
+allow hal_power_default sysfs_virtual:dir search;

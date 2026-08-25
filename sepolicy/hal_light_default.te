@@ -9,5 +9,6 @@ allow hal_light_default sysfs_sec:lnk_file read;
 allow hal_light_default sysfs_sec:file rw_file_perms;
 
 allow hal_light_default sysfs_brightness:file { open read write getattr };
+
+# virtual (for navigating to subdirs under /sys/devices/virtual/)
 allow hal_light_default sysfs_virtual:dir search;
-allow hal_light_default sysfs_virtual:file { read write open getattr };

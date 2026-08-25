@@ -18,6 +18,7 @@ genfscon proc /sec_log          u:object_r:proc_sec:s0
 #genfscon sysfs /class/sec      u:object_r:sysfs_sec:s0
 
 # Power supply devices
+genfscon sysfs /devices/battery/power_supply                                       u:object_r:sysfs_battery:s0
 genfscon sysfs /devices/battery.20/power_supply                                     u:object_r:sysfs_usb_supply:s0
 genfscon sysfs /devices/i2c.26/i2c-8/8-0034/s2mu003-charger/power_supply            u:object_r:sysfs_usb_supply:s0
 genfscon sysfs /devices/13890000.hsi2c/i2c-2/2-0035/power_supply                    u:object_r:sysfs_usb_supply:s0
@@ -26,10 +27,21 @@ genfscon sysfs /devices/platform/htc_battery/power_supply/ps                    
 # Input devices
 genfscon sysfs /devices/virtual/sec/sec_touchkey                            u:object_r:sysfs_input:s0
 
+# A3 touchscreen controller (I2C bus 5)
+genfscon sysfs /devices/i2c@20/i2c-5/5-0020/input/input0                   u:object_r:sysfs_input:s0
+# A3 secondary input device (I2C bus 8)
+genfscon sysfs /devices/13890000.i2c/i2c-8/8-0050/input/input1             u:object_r:sysfs_input:s0
+
 # A5 power supply devices
 genfscon sysfs /devices/battery.43/power_supply                                     u:object_r:sysfs_usb_supply:s0
 genfscon sysfs /devices/i2c.42/i2c-7/7-0071/power_supply                            u:object_r:sysfs_usb_supply:s0
 genfscon sysfs /devices/13890000.hsi2c/i2c-2/2-0049/sm5705-charger/power_supply     u:object_r:sysfs_usb_supply:s0
+
+# A3 s2mu004 charger power supply
+genfscon sysfs /devices/13870000.i2c/i2c-6/6-003d/s2mu004-charger/power_supply       u:object_r:sysfs_battery:s0
+
+# A3 s2mu004 fuelgauge power supply
+genfscon sysfs /devices/13830000.i2c/i2c-9/9-003b/power_supply/s2mu004-fuelgauge    u:object_r:sysfs_battery:s0
 
 # A5 Input devices
 genfscon sysfs /devices/13850000.i2c/i2c-10/10-0020/input/input3            u:object_r:sysfs_input:s0
@@ -57,6 +69,9 @@ genfscon sysfs /module/workqueue/parameters/power_efficient         u:object_r:s
 
 # Camera
 genfscon sysfs /devices/virtual/camera              u:object_r:sysfs_camera:s0
+
+# IIO sensor buffer (covers all iio devices)
+genfscon sysfs /devices/13930000.spi/spi_master/spi2/spi2.0/iio:device  u:object_r:sysfs_iio:s0
 
 # Audio sysfs
 genfscon sysfs /devices/virtual/audio/earjack       u:object_r:sysfs_jack:s0

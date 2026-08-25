@@ -101,6 +101,9 @@
 #/sys/class/lcd(/.*)?         -- u:object_r:sysfs_writable:s0
 
 # bluetooth
+/sys/devices/bluetooth/extldo                              u:object_r:sysfs_bluetooth_writable:s0
+/sys/devices/bluetooth(/.*)?/rfkill/rfkill0/state  u:object_r:sysfs_bluetooth_writable:s0
+/sys/devices/bluetooth(/.*)?/rfkill/rfkill0/type   u:object_r:sysfs_bluetooth_writable:s0
 /sys/devices/bluetooth.[0-9]*/rfkill/rfkill0/state  u:object_r:sysfs_bluetooth_writable:s0
 /sys/devices/bluetooth.[0-9]*/rfkill/rfkill0/type   u:object_r:sysfs_bluetooth_writable:s0
 /sys/class/rfkill/rfkill0/state                     u:object_r:sysfs_bluetooth_writable:s0
@@ -137,6 +140,18 @@
 /sys/devices/virtual/sec/led(/.*)?                      u:object_r:sysfs_light:s0
 /sys/class/lcd/panel/power_reduce                       u:object_r:sysfs_light:s0
 /sys/devices/i2c.24/i2c-6/6-0030/leds(/.*)?             u:object_r:sysfs_light:s0
+
+# Vibrator (must be before sysfs_virtual catch-all)
+/sys/devices/virtual/timed_output/vibrator(/.*)? u:object_r:sysfs_vibrator:s0
+
+# Sensors SSP (must be before sysfs_virtual catch-all)
+/sys/devices/virtual/sensors/ssp_sensor(/.*)?     u:object_r:sysfs_sensors_writable:s0
+
+# Camera flash
+/sys/devices/virtual/camera(/.*)?                 u:object_r:sysfs_camera:s0
+
+# Audio earjack
+/sys/devices/virtual/audio(/.*)?                  u:object_r:sysfs_jack:s0
 
 # virtual
 /sys/devices/virtual(/.*)?    u:object_r:sysfs_virtual:s0

@@ -17,9 +17,6 @@ allow cpboot-daemon cgroup:dir create_dir_perms;
 # log
 allow cpboot-daemon log_vendor_data_file:dir search;
 
-# sysfs
-allow cpboot-daemon sysfs:file { open read };
-
 # vendor default prop
 allow cpboot-daemon vendor_default_prop:property_service set;
 

@@ -1,9 +1,6 @@
 r_dir_file(hal_health_default, sysfs_usb_supply)
 allow hal_health_default sysfs_usb_supply:file rw_file_perms;
 
-# Allow reading of sysfs nodes to find input devices
-allow hal_health_default sysfs:dir r_dir_perms;
-allow hal_health_default sysfs:file r_file_perms;
-
 allow hal_health_default sysfs_battery:dir { open read search };
+allow hal_health_default sysfs_battery:file r_file_perms;
 

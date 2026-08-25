@@ -1,1 +1,5 @@
 allow hal_thermal_default self:netlink_kobject_uevent_socket read;
+
+# Thermal zone temperature readings
+allow hal_thermal_default sysfs_thermal:dir search;
+allow hal_thermal_default sysfs_thermal:file r_file_perms;

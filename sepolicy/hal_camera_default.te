@@ -1,8 +1,9 @@
 # Allow camera HAL to access sysfs camera nodes
-allow hal_camera_default sysfs:dir search;
+allow hal_camera_default sysfs_camera:dir search;
+allow hal_camera_default sysfs_camera:file rw_file_perms;
+
+# virtual (for navigating to /sys/devices/virtual/camera/)
 allow hal_camera_default sysfs_virtual:dir search;
-allow hal_camera_default sysfs:file { read open getattr };
-allow hal_camera_default sysfs_virtual:file { read open getattr };
 
 # Allow access to exported camera properties
 allow hal_camera_default exported_camera_prop:file { read open getattr };
