@@ -83,3 +83,9 @@ genfscon sysfs /devices/14800000.dsim      u:object_r:sysfs_graphics:s0
 
 # video4linux
 genfscon sysfs /devices/12800000.mfc0/video4linux   u:object_r:sysfs_v4l:s0
+
+# Mali GPU debugfs
+genfscon debugfs /mali/mem   u:object_r:debugfs_mali_mem:s0
+
+# ION debugfs
+genfscon debugfs /ion/clients   u:object_r:debugfs_ion:s0

@@ -6,3 +6,6 @@ allow hal_camera_default sysfs_virtual:file { read open getattr };
 
 # Allow access to exported camera properties
 allow hal_camera_default exported_camera_prop:file { read open getattr };
+
+# Allow camera HAL to find graphics mapper
+allow hal_camera_default hal_graphics_mapper_hwservice:hwservice_manager find;
