@@ -1,5 +1,10 @@
 allow kernel self:capability { chown mknod };
 
+# kdevtmpfs creates device-mapper nodes before ueventd relabels them.
+allow kernel device:dir { add_name write };
+type_transition kernel device:blk_file dm_device "dm-0";
+allow kernel dm_device:blk_file { create getattr setattr };
+
 # /dev/mbin0
 allow kernel emmcblk_device:blk_file r_file_perms;
 

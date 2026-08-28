@@ -4,6 +4,9 @@ allow init debugfs:dir mounton;
 # Mount EFS on /efs
 allow init efs_file:dir  mounton;
 
+# Mount the EFS filesystem on its vendor mount point.
+allow init mnt_vendor_file:dir mounton;
+
 # Mount CPEFS on /cpefs
 allow init sec_efs_file:dir mounton;
 
@@ -27,6 +30,7 @@ allow init sysfs_ion:file setattr;
 
 # sysfs usb device
 allow init sysfs_android_usb:file setattr;
+allow init sysfs_android_usb:lnk_file read;
 
 # read/chown mDNIE symlinks
 allow init sysfs_mdnie:lnk_file { r_file_perms setattr };

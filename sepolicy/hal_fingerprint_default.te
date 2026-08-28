@@ -2,3 +2,6 @@ typeattribute hal_fingerprint_default data_between_core_and_vendor_violators;
 
 allow hal_fingerprint_default fingerprintd_data_file:dir write;
 
+# The fingerprint device is below /sys/devices/virtual, whose parent
+# directory retains the generic sysfs_virtual label.
+allow hal_fingerprint_default sysfs_virtual:dir search;

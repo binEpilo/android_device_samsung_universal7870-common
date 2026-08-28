@@ -1,2 +1,4 @@
 allow bootanim userspace_reboot_exported_prop:file { getattr open read };
 
+# BootAnimation probes the Mali debugfs directory during graphics startup.
+allow bootanim debugfs_mali_mem:dir search;

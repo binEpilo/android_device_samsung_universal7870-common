@@ -1,5 +1,8 @@
 # rild.te
 
+# Samsung's proprietary RIL persists a fingerprint under /data/misc/radio.
+typeattribute rild data_between_core_and_vendor_violators;
+
 allow rild block_device:dir search;
 allow rild mnt_vendor_file:dir { getattr search };
 allow rild mif_device:chr_file { ioctl };
@@ -14,6 +17,8 @@ allow rild gpsd:file r_file_perms;
 
 # /data
 allow rild system_data_file:dir getattr;
+allow rild radio_data_file:dir rw_dir_perms;
+allow rild radio_data_file:file create_file_perms;
 
 # /data/vendor/log
 allow rild log_vendor_data_file:dir rw_dir_perms;

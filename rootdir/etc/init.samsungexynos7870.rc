@@ -42,27 +42,20 @@ on post-fs-data
     mkdir /data/vendor 0771 root system
     mkdir /data/vendor/log 0771 root system
 
-#SystemFramework
-    chown system system /data/cache/backup
-    chmod 0711 /data/cache/backup
-    chown system system /data/cache/backup_stage
-    chmod 0711 /data/cache/backup_stage
-
     setprop vold.post_fs_data_done 1
 
 # /efs/factory.prop for Dual / Single SIM settings
     chown radio radio /mnt/vendor/efs/factory.prop
     chmod 0600 /mnt/vendor/efs/factory.prop
 
+# Sensorhub kernel worker needs DAC read access to this calibration.
+    chmod 0664 /efs/FactoryApp/gyro_cal_data
+
 # Permissions for audio
     chown system radio /sys/class/audio/earjack/select_jack
     chown system radio /sys/class/audio/earjack/key_state
     chown system radio /sys/class/audio/earjack/state
     chown system radio /sys/class/audio/earjack/mic_adc
-
-# Audio I2C node for TFA amp
-    chmod 0660 /dev/i2c-20
-    chown audio audio /dev/i2c-20
 
     chown system audio /sys/class/nxp/tfa_log/data
     chown system audio /sys/class/nxp/tfa_log/data_maxx
@@ -72,16 +65,6 @@ on post-fs-data
 
 # Fastcharge
     chown system radio /sys/class/sec/switch/afc_disable
-
-# add a cpuset for the camera daemon
-# we want all cores for camera
-    mkdir /dev/cpuset/camera-daemon
-    write /dev/cpuset/camera-daemon/cpus 0-7
-    write /dev/cpuset/camera-daemon/mems 0
-    chown system system /dev/cpuset/camera-daemon
-    chown system system /dev/cpuset/camera-daemon/tasks
-    chmod 0664 /dev/cpuset/camera-daemon/tasks
-
 
 # for WIFI MAC address
     mkdir /mnt/vendor/efs/wifi 0775 wifi root
@@ -99,9 +82,6 @@ on post-fs-data
     mkdir /data/vendor/log/cbd/err 0771 system radio
     rm /data/vendor/log/cbd/err/last_sr_info_umts
     write /data/vendor/log/cbd/err/last_sr_info_umts ""
-
-# Magnetic sensor YAS539 lib
-    mkdir /data/system/yas_lib 0770 system system
 
 on boot
     # override init.rc to keep plenty of large order chunks around
@@ -148,8 +128,6 @@ on boot
     chmod 0664 /sys/class/sec/sec_nad/nad_support
     chown system radio /sys/class/sec/sec_nad/nad_api
     chmod 0664 /sys/class/sec/sec_nad/nad_api
-    chown system radio /dev/block/NAD_REFER
-    chmod 0664 /dev/block/NAD_REFER
 
     # 1-key hard reset
     chown system system /sys/power/reset_enabled
@@ -553,7 +531,6 @@ on boot
     chown system radio  /sys/bus/iio/devices/iio:device1/smd_threshold
     chown system radio  /sys/bus/iio/devices/iio:device1/step_detector_on
     chown system radio  /sys/bus/iio/devices/iio:device1/step_indicator_on
-    chown system radio  /sys/bus/iio/devices/iio:device1/subsystem
     chown system radio  /sys/bus/iio/devices/iio:device1/temperature
     chown system radio  /sys/bus/iio/devices/iio:device1/timestamp
     chown system radio  /sys/bus/iio/devices/iio:device1/three_axes_q_on
@@ -662,7 +639,6 @@ on boot
     chmod 660  /sys/bus/iio/devices/iio:device1/smd_threshold
     chmod 660  /sys/bus/iio/devices/iio:device1/step_detector_on
     chmod 660  /sys/bus/iio/devices/iio:device1/step_indicator_on
-    chmod 660  /sys/bus/iio/devices/iio:device1/subsystem
     chmod 660  /sys/bus/iio/devices/iio:device1/temperature
     chmod 660  /sys/bus/iio/devices/iio:device1/timestamp
     chmod 660  /sys/bus/iio/devices/iio:device1/three_axes_q_on
@@ -938,20 +914,6 @@ on fs
     chown system audio /dev/radio0
     chmod 0660 /dev/radio0
     chown bluetooth bluetooth /sys/devices/bluetooth/lna_en
-
-# Access permission for input_suspend
-    mkdir /sys/class/power_supply/battery/input_suspend 0770 system system
-    mkdir /sys/power/suspend_stats 0770 system system
-    mkdir /sys/class/wakeup 0770 system system
-    mkdir /sys/class/wake_unlock 0770 system system
-    chown system system /sys/class/power_supply/battery/input_suspend
-    chown system system /sys/power/suspend_stats
-    chown system system /sys/class/wakeup
-    chown system system /sys/class/wake_unlock
-    chmod 0666 /sys/class/power_supply/battery/input_suspend
-    chmod 0666 /sys/power/suspend_stats
-    chmod 0666 /sys/class/wakeup
-    chmod 0666 /sys/class/wake_unlock
 
 # ARGOSD network_throughput
     chown system system /dev/network_throughput

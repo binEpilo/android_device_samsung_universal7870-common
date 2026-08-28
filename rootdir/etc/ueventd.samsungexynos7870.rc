@@ -104,6 +104,10 @@
 
 # audio
 /dev/seiren               0660   system     audio
+/dev/i2c-20               0660   audio      audio
+
+# GNSS
+/dev/gnss_ipc             0660   system     system
 
 # MobiCore
 /dev/mobicore             0600   system     system

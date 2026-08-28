@@ -18,6 +18,7 @@ binder_call(system_server, gpsd)
 
 allow gpsd self:netlink_kobject_uevent_socket create_socket_perms_no_ioctl;
 allow gpsd self:{ tcp_socket udp_socket } create_stream_socket_perms;
+allow gpsd gps_device:chr_file rw_file_perms;
 allow gpsd port:tcp_socket { name_bind name_connect };
 allow gpsd port:udp_socket name_bind;
 allow gpsd node:{ tcp_socket udp_socket } node_bind;

@@ -176,7 +176,10 @@ BOARD_SECCOMP_POLICY := $(LOCAL_PATH)/seccomp
 
 # SELinux
 include device/lineage/sepolicy/exynos/sepolicy.mk
+BOARD_SEPOLICY_TEE_FLAVOR := mobicore
 include device/samsung_slsi/sepolicy/sepolicy.mk
+# This retrofitted Treble device does not use the launch-era MobiCore grants.
+BOARD_VENDOR_SEPOLICY_DIRS := $(filter-out device/samsung_slsi/sepolicy/tee/mobicore/legacy,$(BOARD_VENDOR_SEPOLICY_DIRS))
 BOARD_SEPOLICY_DIRS := $(LOCAL_PATH)/sepolicy
 
 # Treble

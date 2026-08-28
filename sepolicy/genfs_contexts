@@ -29,8 +29,13 @@ genfscon sysfs /devices/virtual/sec/sec_touchkey                            u:ob
 
 # A3 touchscreen controller (I2C bus 5)
 genfscon sysfs /devices/i2c@20/i2c-5/5-0020/input/input0                   u:object_r:sysfs_input:s0
+genfscon sysfs /devices/i2c@20/i2c-5/5-0020/input/input0/enabled           u:object_r:sysfs_touchscreen_writable:s0
 # A3 secondary input device (I2C bus 8)
 genfscon sysfs /devices/13890000.i2c/i2c-8/8-0050/input/input1             u:object_r:sysfs_input:s0
+genfscon sysfs /devices/13890000.i2c/i2c-8/8-0050/input/input1/enabled     u:object_r:sysfs_touchscreen_writable:s0
+
+# Headset event input scanned by the power HAL
+genfscon sysfs /devices/10510000.hsi2c/i2c-0/0-a004/input                  u:object_r:sysfs_input:s0
 
 # A5 power supply devices
 genfscon sysfs /devices/battery.43/power_supply                                     u:object_r:sysfs_usb_supply:s0
@@ -72,12 +77,22 @@ genfscon sysfs /devices/virtual/camera              u:object_r:sysfs_camera:s0
 
 # IIO sensor buffer (covers all iio devices)
 genfscon sysfs /devices/13930000.spi/spi_master/spi2/spi2.0/iio:device  u:object_r:sysfs_iio:s0
+genfscon sysfs /devices/10550000.adc/iio:device0                        u:object_r:sysfs_iio:s0
+
+# Sensor and fingerprint identity nodes
+genfscon sysfs /devices/virtual/sensors/accelerometer_sensor             u:object_r:sysfs_sensors:s0
+genfscon sysfs /devices/virtual/sensors/light_sensor                     u:object_r:sysfs_sensors:s0
+genfscon sysfs /devices/virtual/fingerprint                              u:object_r:sysfs_fingerprint:s0
 
 # Audio sysfs
 genfscon sysfs /devices/virtual/audio/earjack       u:object_r:sysfs_jack:s0
 
 # USB lun device
 genfscon sysfs /devices/13580000.usb/gadget/lun0    u:object_r:sysfs_android_usb:s0
+genfscon sysfs /devices/13600000.usb/13600000.dwc3/gadget/lun0 u:object_r:sysfs_android_usb:s0
+
+# Modem hardware revision
+genfscon sysfs /firmware/devicetree/base/model_info-system_rev u:object_r:sysfs_model_info:s0
 
 # MMC block device cache files
 genfscon sysfs /devices/virtual/bdi/179:0/read_ahead_kb     u:object_r:sysfs_block:s0
@@ -98,6 +113,13 @@ genfscon sysfs /devices/14800000.dsim      u:object_r:sysfs_graphics:s0
 
 # video4linux
 genfscon sysfs /devices/12800000.mfc0/video4linux   u:object_r:sysfs_v4l:s0
+genfscon sysfs /devices/12c30000.mfc0/video         u:object_r:sysfs_v4l:s0
+
+# RTC
+genfscon sysfs /devices/10510000.hsi2c/i2c-0/0-a066/s2m-rtc/rtc             u:object_r:sysfs_rtc:s0
+
+# WLAN network interface
+genfscon sysfs /devices/13550000.dwmmc1/mmc_host/mmc1/mmc1:0001/mmc1:0001:1/net/wlan0 u:object_r:sysfs_net:s0
 
 # Mali GPU debugfs
 genfscon debugfs /mali/mem   u:object_r:debugfs_mali_mem:s0

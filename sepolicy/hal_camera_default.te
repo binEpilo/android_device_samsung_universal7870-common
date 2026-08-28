@@ -1,3 +1,5 @@
+vndbinder_use(hal_camera_default)
+
 # Allow camera HAL to access sysfs camera nodes
 allow hal_camera_default sysfs_camera:dir search;
 allow hal_camera_default sysfs_camera:file rw_file_perms;

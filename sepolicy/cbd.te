@@ -1,0 +1,2 @@
+# Modem hardware revision
+allow cbd sysfs_model_info:file r_file_perms;

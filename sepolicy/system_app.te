@@ -1,5 +1,11 @@
 allow system_app sysfs_mdnie:{ file lnk_file } rw_file_perms;
 allow system_app sysfs_mdnie:dir search;
 allow system_app sysfs_graphics:dir search;
+
+# Framework and app RenderThreads probe Mali memory accounting during graphics startup.
+allow appdomain debugfs_mali_mem:dir { open read search };
+allow { system_app platform_app priv_app } debugfs_mali_mem:file { open getattr read };
+get_prop(platform_app, exported_camera_prop)
+
 allow system_app wificond:binder call;
 allow system_app fm_radio_device:chr_file rw_file_perms;
